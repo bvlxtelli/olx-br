@@ -2,12 +2,6 @@
 
 Esse é um pacote simples de integração com a [Api Importação de Anúncios](https://github.com/olxbr/ad_integration) da OLX Brasil hospedado no [NPM](https://www.npmjs.com/package/olx-br). Eu não tenho nenhuma afiliação com a OLX.
 
-> Este repositório é um fork de [ViniciusRossmann/olx-br](https://github.com/ViniciusRossmann/olx-br)
-> (MIT, autor original **Vinícius Rossmann Nunes**). A licença MIT e a atribuição ao autor
-> original foram preservadas e o nome do pacote (`olx-br`) não foi alterado. O fork é
-> marcado como `private` no `package.json` e **não é publicado no npm**, porque o nome
-> `olx-br` no npm pertence ao autor do projeto original.
-
 ## Instalação
 
 ```bash
@@ -81,14 +75,10 @@ porque o servidor de autorização o compara com o valor registrado. Por isso, o
 As mensagens dos compradores podem ser recebidas através de um webhook. O cliente de chat
 usa o token de acesso como *bearer token* e exige o escopo `chat`.
 
-> O token de acesso só é aceito no header `Authorization: Bearer <token>`. Enviado no header
-> `accessToken` ou no corpo da requisição, a API responde `400` com
-> `{"message":"Bad request: accessToken is required"}`.
-
 | Método | Requisição | Resposta |
 |---|---|---|
 | `Olx.ativarWebhookChat(access_token, webhook)` | `POST /autoservice/v1/chat` com `{"webhook": "url"}` | `201` na primeira ativação, `200` em atualizações, `401` com token inválido |
-| `Olx.desativarWebhookChat(access_token)` | `DELETE /autoservice/v1/chat` | `200` ao desativar, `401` com token inválido, `400` quando a conta não existe |
+| `Olx.desativarWebhookChat(access_token)` | `DELETE /autoservice/v1/chat` | `200` ao desativar, `400` quando a conta não existe |
 | `Olx.responderChat(access_token, mensagem)` | `POST /autoservice/v1/chat/send` com `{"textMessage", "messageId", "chatId"}` | `200` ao enviar, `400` com corpo inválido ou sem integração, `500` em erro interno |
 
 ```javascript
@@ -123,26 +113,24 @@ são implementados por este pacote. A API responde `500` com o corpo
 
 ## Erros
 
-Todas as requisições que falham rejeitam com um `OlxApiError`, que preserva o status HTTP,
-o código de erro e o corpo da resposta.
+Existem dois tipos de erro na API da OLX e eles não devem ser misturados.
+
+**Erro da aplicação** — a API responde `HTTP 200` e o resultado da operação vem no corpo,
+inclusive quando a operação falhou. Nesse caso a promise é **resolvida** e quem chama tem
+que ler o `statusCode`:
 
 ```javascript
-try {
-  await Olx.getAnuncios(access_token);
-} catch (err) {
-  console.log(err.status);     //ex: 401
-  console.log(err.code);       //código informado pela OLX
-  console.log(err.body);       //corpo da resposta
-  console.log(err.message);    //mensagem informada pela OLX
+const res = await Olx.putAnuncios(access_token, [anuncio]);
+if (res.statusCode === 0) {
+  // o anúncio foi importado
+  const token_anuncio = res.token;
+} else {
+  console.log(res.statusCode, res.statusMessage, res.errors);
 }
 ```
 
-O código e a mensagem são lidos tanto na raiz do corpo quanto dentro do objeto `error`, que
-é o formato usado pelos endpoints de autoupload:
-
-```json
-{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"Response code 404 (Not Found)","statusCode":404}}
-```
+**Erro HTTP** — a API responde `4xx` ou `5xx`. Nesse caso a promise é **rejeitada** com um
+`OlxApiError`, que preserva o corpo da resposta como ele chegou.
 
 ### Erro de aplicação e erro HTTP
 
@@ -198,13 +186,34 @@ Todas as requisições que falham rejeitam com um `OlxApiError`, que é um `Erro
 | `cause` | o erro original lançado pelo axios, quando existe |
 | `message` | a mensagem informada pela API |
 
-O `response` do axios **não** é exposto: ele carrega o `config`, e o `config.data` é o corpo
-da requisição — no `getToken` esse corpo é o formulário com o `client_secret` do aplicativo.
+```javascript
+try {
+  await Olx.getAnuncios(access_token);
+} catch (err) {
+  if (err instanceof Olx.OlxApiError) {
+    console.log(err.status);    // ex: 401
+    console.log(err.code);      // ex: 'ACCESS_TOKEN_NOT_FOUND'
+    console.log(err.body);      // o corpo cru da resposta
+    console.log(err.message);   // ex: 'Response code 404 (Not Found)'
+  }
+}
+```
+
+O corpo da resposta também tem os seus campos copiados para o erro, então o código que lia o
+corpo diretamente (`err.message`, `err.errors`, ...) continua funcionando.
+
+O código e a mensagem são lidos tanto na raiz do corpo quanto dentro do objeto `error`, que
+é o formato usado pelos endpoints de autoupload:
+
+```json
+{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"Response code 404 (Not Found)","statusCode":404}}
+```
 
 **Atenção ao `cause`:** ele guarda o erro original do axios, que carrega a requisição
-completa. Não registre o erro inteiro no log (`console.error(err)`) nem o transforme em JSON
-(`JSON.stringify(err)`) em uma aplicação que tem segredos: o `client_secret` do aplicativo
-aparece no `cause`. Registre `err.status`, `err.code`, `err.body` e `err.message`.
+completa. As credenciais do aplicativo (`client_secret`, token de acesso e o header
+`Authorization`) são **removidas** dele, então ele pode ser registrado com segurança.
+Ainda assim, prefira registrar `err.status`, `err.code`, `err.body` e `err.message`: o
+`cause` carrega a requisição inteira e não é informação de negócio.
 
 ### Migrando da versão 1.x para a 2.x
 
@@ -217,7 +226,7 @@ resposta (e, quando o corpo vinha vazio, com o erro do axios). Na 2.x a rejeita 
 try {
   await Olx.getAnuncios(access_token);
 } catch (e) {
-  console.log(e.message);         // o corpo bruto
+  console.log(e.message);        // o corpo bruto
   console.log(e.response.status); // só funcionava quando o corpo vinha vazio
 }
 
@@ -225,9 +234,9 @@ try {
 try {
   await Olx.getAnuncios(access_token);
 } catch (e) {
-  console.log(e.status);          // o status HTTP
-  console.log(e.code);            // o código do erro
-  console.log(e.body);            // o corpo bruto da resposta
+  console.log(e.status);         // o status HTTP
+  console.log(e.code);           // o código do erro
+  console.log(e.body);           // o corpo bruto da resposta
 }
 ```
 
@@ -246,16 +255,11 @@ O código compilado (`dist/`) continua mirando em ES5, mas a dependência `axios
 ## Desenvolvimento
 
 ```bash
-npm ci              # instala as dependências
-npm run build       # compila o pacote em dist/
-npm run typecheck   # verifica os tipos do código e dos testes
-npm test            # roda a suíte de testes unitários
-npm run test:integration  # roda os testes contra a API da OLX (precisa de internet)
-npm run test:coverage     # roda a suíte e gera o relatório de cobertura
+npm ci         # instala as dependências
+npm run typecheck  # verifica os tipos do código e dos testes
+npm run build      # compila em dist/
+npm test           # roda a suíte de testes
 ```
-
-Os testes de integração são ignorados por padrão e usam credenciais falsas: eles verificam
-o status HTTP e o corpo da resposta da API real, sem precisar de nenhuma credencial.
 
 ## Contato
 
