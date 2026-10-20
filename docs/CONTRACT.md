@@ -369,10 +369,16 @@ fields of the array are **not** copied onto the error — the caller reads `erro
 
    The same shape is applied to the other methods.
 6. **`package.json` — the version becomes `2.0.0`** (§8) and `engines` is declared (§6,
-   item 10).
+   finding 12).
 7. **the tests** cover the new rules: the nested shape of the `autoupload` group, the OAuth
    shape with `error_description`, the body with `__proto__`, the `cause` that is not
    enumerable, and the `getToken` that answers `200` without a token.
+
+This list is the part of PR #1 that belongs to the **error contract**. The other blocking
+findings of PR #1 are outside of it and are listed in §6: the correction of the description
+(finding 1 and 2), the version and the `engines` (finding 7 and 12), the trigger of the
+workflow (finding 8), the type check of the test files (finding 9) and the assertions of the
+method and the path of every public method (finding 10).
 
 ---
 
@@ -507,8 +513,12 @@ other pull requests.
 ## 6. The review of PR #1, line by line
 
 The full review is in the comment of PR #1. This is the list of the findings, with the
-severity and the owner. The findings 1, 2, 3, 6 and 8 are shared with the review of the
-Tech Lead; the findings 4, 5, 7, 9 and 10 to 14 are the ones of this document.
+severity and the owner. The numbering of this table is the numbering of **this document**;
+the comment of PR #1 lists the same findings in a different order.
+
+The findings **1, 2, 3, 6, 9, 10 and 12** are shared with the decisions and with the review
+of the Tech Lead — the findings 9 and 10 were found by the lead's review and confirmed here.
+The findings **4, 5, 7, 8, 11, 13, 14, 15 and 16** are the ones of this document.
 
 | # | severity | finding | where | action |
 |---|----------|---------|-------|--------|
