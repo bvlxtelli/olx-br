@@ -15,6 +15,9 @@
         "test:integration": "vitest run --config vitest.integration.config.mts",
         "test:coverage": "vitest run --coverage",
         "typecheck": "tsc --noEmit -p tsconfig.test.json",
+        "qa:contract": "vitest run test/qa/contract-matrix.test.ts",
+        "qa:compat": "vitest run test/qa/compat-1.0.6.test.ts",
+        "qa:live": "vitest run --config vitest.integration.config.mts test/integration/live-matrix.test.ts",
         "prepublishOnly": "npm run build"
     },
     "keywords": ["OLX", "OLX Brasil"],
