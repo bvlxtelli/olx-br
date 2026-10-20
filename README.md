@@ -132,6 +132,46 @@ if (res.statusCode === 0) {
 **Erro HTTP** — a API responde `4xx` ou `5xx`. Nesse caso a promise é **rejeitada** com um
 `OlxApiError`, que preserva o corpo da resposta como ele chegou.
 
+### Erro de aplicação e erro HTTP
+
+A API da OLX reporta o erro de duas maneiras diferentes:
+
+- **Erro de aplicação**: a API responde `200` e o erro vem dentro do payload, no campo
+  `statusCode`. Nesse caso a promise **resolve** com esse payload.
+
+  ```javascript
+  const res = await Olx.putAnuncios(access_token, [anuncio]);
+  if (res.statusCode !== 0) {
+    console.log(res.statusCode);    //ex: -6
+    console.log(res.statusMessage); //ex: "Without permission"
+  }
+  ```
+
+- **Erro HTTP**: a API responde `4xx` ou `5xx`. Nesse caso a promise **rejeita**, e o erro
+  carrega o payload cru da resposta em `err.body` (também disponível como `err.data`).
+
+### Formatos de erro da API
+
+Cada endpoint nomeia o erro de um jeito, e a API devolve **9 formatos diferentes** de resposta
+de erro. Todos são preservados em `err.body`, e os campos do corpo também são copiados para o
+erro — assim é possível ler `err.message`, `err.reason`, `err.errors` etc. direto na exceção:
+
+| # | formato | exemplo | status | `code` | `message` |
+|---|---|---|---|---|---|
+| 1 | grupo `autoupload`, aninhado | `{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"Response code 404 (Not Found)","statusCode":404}}` | `404` | `ACCESS_TOKEN_NOT_FOUND` | `Response code 404 (Not Found)` |
+| 2 | grupo `autoservice` | `{"message":"Unauthorized"}` | `401` | — | `Unauthorized` |
+| 3 | grupo `autoservice`, com o token no lugar errado | `{"message":"Bad request: accessToken is required"}` | `400` | — | `Bad request: accessToken is required` |
+| 4 | host de autorização, OAuth | `{"error":"invalid_client"}` | `400` | `invalid_client` | `invalid_client` |
+| 5 | host de autorização, OAuth com descrição | `{"error":"invalid_grant","error_description":"..."}` | `400` | `invalid_grant` | a descrição |
+| 6 | corpo que é um **array** | `[{"property":"access_token","message":"is missing and it is required"}]` | `400` | — | `Request failed with status code 400` |
+| 7 | corpo que é um **texto** | `"Cannot POST /autoupload/import"` | `404` | — | `Request failed with status code 404` |
+| 8 | o campo com o nome escrito errado | `{"mesage":"404 NOT_FOUND ..."}` | `500` | — | `404 NOT_FOUND ...` |
+| 9 | corpo **vazio** | `""` | `400` | — | `Request failed with status code 400` |
+
+O erro de aplicação (o `200` com `statusCode` negativo, como o `-6` "Without permission" do
+`/autoupload/import`) não está na lista: ele não é um erro HTTP, a promise resolve e quem
+chama tem que ler o `statusCode`.
+
 ### O objeto de erro
 
 Todas as requisições que falham rejeitam com um `OlxApiError`, que é um `Error` e carrega:

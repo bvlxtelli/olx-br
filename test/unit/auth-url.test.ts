@@ -32,6 +32,15 @@ describe('getAuthUrl', () => {
         );
     });
 
+    it('keeps the query string of the published package when the autoupload scope is off', () => {
+        const url = olx.getAuthUrl(false);
+
+        expect(url).toBe(
+            'https://auth.olx.com.br/oauth?response_type=code&client_id=client-id' +
+            '&redirect_uri=https://example.com/callback&scope=basic_user_info'
+        );
+    });
+
     it('keeps working when the base URL has a trailing slash', () => {
         authApi.defaults.baseURL = `${AUTH_BASE_URL}/`;
 
@@ -107,5 +116,13 @@ describe('getAuthUrl', () => {
 
         expect(url).toContain('scope=basic_user_info%20autoupload');
         expect(url).not.toContain('scope=basic_user_info+autoupload');
+    });
+
+    it('keeps the default base URL when the instance has none configured', () => {
+        authApi.defaults.baseURL = undefined;
+
+        const url = olx.getAuthUrl();
+
+        expect(url.startsWith('https://auth.olx.com.br/oauth?')).toBe(true);
     });
 });
