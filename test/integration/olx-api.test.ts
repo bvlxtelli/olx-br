@@ -13,16 +13,62 @@ import Olx from '../../src/index';
  *
  *   npm run test:integration
  *
+ * or, for a single run of any vitest configuration:
+ *
+ *   OLX_LIVE=1 npx vitest run --config vitest.integration.config.mts
+ *
  * The answers asserted here were measured against the live API. They may change when OLX
  * changes its API, in which case the test that fails is the one pointing the change.
  */
-const enabled = process.env.OLX_INTEGRATION_TESTS === '1';
+const enabled = process.env.OLX_LIVE === '1';
 
 const AUTH_BASE_URL = 'https://auth.olx.com.br';
 const APP_BASE_URL = 'https://apps.olx.com.br';
 const FAKE_TOKEN = 'fake-access-token';
 
 describe.skipIf(!enabled)('OLX API (integration)', () => {
+    it('answers 400 when the token is not sent in the Authorization header', async () => {
+        const response = await axios.post(
+            `${APP_BASE_URL}/autoservice/v1/chat`,
+            { webhook: 'https://example.com/hook' },
+            { validateStatus: () => true }
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.data.message).toBe('Bad request: accessToken is required');
+    });
+
+    it('answers 400 when the token is sent in the accessToken header', async () => {
+        const response = await axios.post(
+            `${APP_BASE_URL}/autoservice/v1/chat`,
+            { webhook: 'https://example.com/hook' },
+            { headers: { accessToken: FAKE_TOKEN }, validateStatus: () => true }
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.data.message).toBe('Bad request: accessToken is required');
+    });
+
+    it('answers 400 when the token is sent in the body', async () => {
+        const response = await axios.post(
+            `${APP_BASE_URL}/autoservice/v1/chat`,
+            { webhook: 'https://example.com/hook', accessToken: FAKE_TOKEN },
+            { validateStatus: () => true }
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.data.message).toBe('Bad request: accessToken is required');
+    });
+
+    it('answers 400 when the chat webhook is deactivated without a token', async () => {
+        const response = await axios.delete(`${APP_BASE_URL}/autoservice/v1/chat`, {
+            validateStatus: () => true
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.data.message).toBe('Bad request: accessToken is required');
+    });
+
     it('answers 401 when the chat webhook is activated with an invalid token', async () => {
         const response = await axios.post(
             `${APP_BASE_URL}/autoservice/v1/chat`,
@@ -57,16 +103,9 @@ describe.skipIf(!enabled)('OLX API (integration)', () => {
         expect(response.data.message).toBe('Unauthorized');
     });
 
-    it('answers 401 when the leads are read with an invalid token', async () => {
-        const response = await axios.get(`${APP_BASE_URL}/autoservice/v1/lead`, {
-            headers: { Authorization: `Bearer ${FAKE_TOKEN}` },
-            validateStatus: () => true
-        });
-
-        expect(response.status).toBe(401);
-        expect(response.data.reason).toBe('ACCESS_DENIED');
-        expect(response.data.message).toBe('Check the client authentication token.');
-    });
+    // `GET /autoservice/v1/lead` is not covered on purpose: it is unstable. It answers
+    // `401 ACCESS_DENIED` on some calls and `500 Range [7, 17) out of bounds for length 11`
+    // on others, so no test may depend on its status.
 
     it('answers 200 without permission when an advertisement is imported', async () => {
         const response = await axios.put(
@@ -81,6 +120,31 @@ describe.skipIf(!enabled)('OLX API (integration)', () => {
         expect(response.status).toBe(200);
         expect(response.data.statusCode).toBe(-6);
         expect(response.data.statusMessage).toBe('Without permission');
+    });
+
+    it('answers 200 with an application error when there is no ad to import', async () => {
+        const response = await axios.put(
+            `${APP_BASE_URL}/autoupload/import`,
+            { access_token: FAKE_TOKEN, ad_list: [] },
+            { validateStatus: () => true }
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.data.statusCode).toBe(-3);
+        expect(response.data.statusMessage).toBe('There is no ad to import');
+    });
+
+    it('answers 404 with a nested error when the published ads are read', async () => {
+        const response = await axios.post(
+            `${APP_BASE_URL}/autoupload/published`,
+            { access_token: FAKE_TOKEN },
+            { validateStatus: () => true }
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.data.status).toBe('ERROR');
+        expect(response.data.error.reason).toBe('ACCESS_TOKEN_NOT_FOUND');
+        expect(response.data.error.statusCode).toBe(404);
     });
 
     it('answers 400 when the authorization code is invalid', async () => {

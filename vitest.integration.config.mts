@@ -13,7 +13,7 @@ export default defineConfig({
         testTimeout: 30000,
         hookTimeout: 30000,
         env: {
-            OLX_INTEGRATION_TESTS: '1'
+            OLX_LIVE: '1'
         }
     }
 });
