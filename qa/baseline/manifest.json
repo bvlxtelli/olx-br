@@ -1,0 +1,20 @@
+{
+  "package": "olx-br@1.0.6",
+  "generatedFrom": "https://registry.npmjs.org/olx-br/-/olx-br-1.0.6.tgz",
+  "generatedAt": "2026-10-20",
+  "entry": "dist/index.js",
+  "declaration": "dist/index.d.ts",
+  "files": [
+    "dist/index.d.ts",
+    "dist/index.js",
+    "dist/services/api.d.ts",
+    "dist/services/api.js",
+    "dist/types.d.ts",
+    "dist/types.js"
+  ],
+  "sha256": {
+    "dist/index.js": "2ff769a2c8f7437a4591005fe58231e8aa0b999297409c9e323071ee1a480c34",
+    "dist/index.d.ts": "c078422db18f34c26543ff4f696d3accdbf11967b12185dbd4b94cb052fb6e52"
+  },
+  "note": "Frozen baseline of the published package. The compatibility gate compares the built package of the branch against this folder. Regenerate it only on purpose."
+}
