@@ -112,7 +112,7 @@ class Olx {
      * @param {string} state Fornece qualquer valor que pode ser útil a aplicação ao receber a resposta de requisição.
      * @returns {string} URL a ser usada para obter a autorização da OLX. 
      */
-<    getAuthUrl(scopes?: boolean | string | string[], state?: string): string {
+    getAuthUrl(scopes?: boolean | string | string[], state?: string): string {
         // O padrão é aplicado no corpo (e não na assinatura) para que a aridade do método
         // seja a mesma no pacote compilado e no código-fonte executado pelos testes.
         const requested = resolveScopes(scopes === undefined ? true : scopes);
