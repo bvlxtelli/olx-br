@@ -72,6 +72,15 @@ defects were found and reproduced against the code of the branch:
 
 The three are blocking and are listed in §6 with the exact change.
 
+The review of the branch also found **two gaps in the verification layer**, which are not
+defects of the error contract but are as blocking for the merge of the stack, because the
+gate that is supposed to protect the contract does not protect it:
+
+* `npm run typecheck` **does not type check the test files** — the `exclude` inherited from
+  `tsconfig.json` wins over the `include` of `tsconfig.test.json` (§6, finding 9);
+* **no test asserts the HTTP method or the path** of any endpoint, so a change of verb in
+  the source keeps the suite green (§6, finding 10).
+
 ---
 
 ## 2. The two kinds of failure
@@ -226,9 +235,16 @@ contract               : error.code    -> 'ACCESS_TOKEN_NOT_FOUND'
                         error.message -> 'Response code 404 (Not Found)'
 ```
 
-This shape is the answer of the `autoupload` group — `getAnuncios`, `getModelosCarros`,
-`getModelosMotos`, `getCilindradas`, `putAnuncios`, `deleteAnuncios` and `getStatusAnuncio`,
-that is, **seven of the eight** methods of the advertisement API.
+This shape is the answer of the `autoupload` group when the request is refused. It reaches
+**four** of the eight methods of the advertisement API: `getAnuncios` (`A05`),
+`getModelosCarros` (`A07`–`A09`), `getModelosMotos` (`A10`, `A11`) and `getCilindradas`
+(`A12`).
+
+The three methods that **write** — `putAnuncios`, `deleteAnuncios` and `getStatusAnuncio` —
+are **not** affected: the API answers them with `HTTP 200` and the application error in the
+body (`A01`, `A02`, `A04`), so they resolve and the caller reads the `statusCode` (§2). The
+eighth method, `getBasicUserInfo`, answers with an empty body or with an array (`A14`,
+`A15`), and it is covered by the shape 9 and by the shape 6 of §3.8.
 
 ### 3.6 How `message` is extracted — decision
 
@@ -421,7 +437,7 @@ is one line, and the README MUST mark them as unconfirmed.
 | parameter | rule |
 |-----------|------|
 | `response_type` | always `code` |
-| `client_id` | sent verbatim, as registered |
+| `client_id` | sent **encoded** with `encodeURIComponent`. The identifier that OLX gives is an opaque token, so the encoding is a no-op for the real value; it only matters for a value that carries a reserved character |
 | `redirect_uri` | sent **verbatim**, exactly as registered. It is **not** encoded: the authorization server compares it with the registered value, and there is no way to confirm that it decodes it. **MUST** be documented: the redirect URI must not contain `&`, `#`, `?` or spaces |
 | `scope` | the scopes joined by `%20` |
 | `state` | sent **encoded** with `encodeURIComponent`. For the values that make sense (a UUID, a random token) the encoding is a no-op, so the behaviour does not change; for the values that contain a reserved character the current behaviour is already broken. The application has to read it with `decodeURIComponent` |
@@ -429,6 +445,20 @@ is one line, and the README MUST mark them as unconfirmed.
 The base URL is `https://auth.olx.com.br`, without a trailing slash, and the path is
 appended by a helper that removes any trailing slash — so the URL never has a double slash,
 even if the base URL is reconfigured at runtime.
+
+**The one open point of this section is the `redirect_uri`.** The suggestion of building the
+whole query with `URLSearchParams` is the correct OAuth form (RFC 6749 §3.1), and it would
+fix the truncation of a redirect URI that carries a query string. It is **not** applied in
+this stack, for one reason: the published package sends the redirect URI verbatim and the
+authorization server accepts it, and nothing that the team could measure proves that the
+server decodes it. Encoding it would change the bytes that are compared with the registered
+value, and a wrong guess breaks the login of every consumer of the package.
+
+The decision is therefore: **the `redirect_uri` stays verbatim, and the limitation is
+documented**. It can be revisited as soon as it can be confirmed with the real `client_id`
+(M1) — one request to the authorization server with an encoded redirect URI answers the
+question. Until then, a redirect URI with `&`, `#`, `?` or spaces is **not supported**, and
+the README has to say so.
 
 ### 4.5 The compatibility with 1.0.6
 
@@ -477,24 +507,27 @@ other pull requests.
 ## 6. The review of PR #1, line by line
 
 The full review is in the comment of PR #1. This is the list of the findings, with the
-severity and the owner.
+severity and the owner. The findings 1, 2, 3, 6 and 8 are shared with the review of the
+Tech Lead; the findings 4, 5, 7, 9 and 10 to 14 are the ones of this document.
 
 | # | severity | finding | where | action |
 |---|----------|---------|-------|--------|
 | 1 | **blocking** | the description says that the build target moved from ES5 to ES2020. The code keeps `"target": "es5"` with `"lib": ["ES2020","DOM"]` | the description of PR #1 | correct the description: the target did not move; `esModuleInterop` was added, and it is what the typings of axios 1.x require |
 | 2 | **blocking** | the description presents the double slash as a defect that was "reproduced against the live API before the fix". Both forms answer `302` | the description of PR #1 | rewrite the item: the change normalizes the URL, it does not fix a defect. The item 3 of the same description ("the query string must not change") is the real invariant, and it is the one the tests have to guard |
-| 3 | **blocking** | `code` is not extracted from the nested `error` object, so it is `undefined` in the shape that the `autoupload` group — seven of the eight methods — uses | `src/errors.ts` | §3.5 |
+| 3 | **blocking** | `code` is not extracted from the nested `error` object, so it is `undefined` in the shape that the `autoupload` group uses — the four read methods | `src/errors.ts` | §3.5 |
 | 4 | **blocking** | a body with a `__proto__` key replaces the prototype of the error and `instanceof` stops working | `src/errors.ts` | §3.7 |
 | 5 | **blocking** | `cause` is enumerable: the `client_secret` leaks into `JSON.stringify(error)` and into `console.error(error)` | `src/errors.ts` | §3.4 |
 | 6 | **blocking** | the message of the OAuth shape is wrong: `error_description` is ignored because the loose `error` comes first | `src/errors.ts` | §3.6 |
 | 7 | **blocking** | the version is still `1.0.6`, and the change of the rejection value is breaking | `package.json` | `2.0.0` (§8) |
 | 8 | **blocking** | the workflow only runs for the pull requests that target `main`, so the stacked pull requests of the series are not verified by the rule that introduces the CI. PR #2 already carries the fix (commit `34c2874`) | `.github/workflows/ci.yml` | fold the fix of PR #2 into PR #1, so that PR #1 is self contained |
-| 9 | advisory | the description says that `npm audit` reported "2 high severity vulnerabilities" before the change. The number depends on the advisory database of the day: on 2026-10-20 the old tree reports one dependency with high severity and twenty advisories, and the new tree reports `found 0 vulnerabilities` | the description of PR #1 | keep the direction, soften the number |
-| 10 | advisory | the package has no `engines`, and it is not an ES5 runtime package: the emitted code is ES5, but it uses `Promise` (already in 1.0.6), `URLSearchParams` (already in 1.0.6) and, **new in this PR**, `Object.setPrototypeOf` | `package.json` | `"engines": { "node": ">=18" }`, and the requirement in the README |
-| 11 | advisory | the `try` block also covers the reading of the body, so a programming error is disguised as an API error | `src/index.ts` | §3.9, change 5 |
-| 12 | advisory | `data` is an alias of `body`, and a body that has a field of its own called `data` would not be copied onto the error | `src/errors.ts` | it is the documented behaviour (§3.7); the value stays reachable in `error.body.data` |
-| 13 | nit | the actions of the workflow are not pinned by commit | `.github/workflows/ci.yml` | optional for an internal fork |
-| 14 | nit | `prepublishOnly` is dead code while the package is `private: true` | `package.json` | harmless; it becomes live if the package is ever un-privated |
+| 9 | **blocking** | **`npm run typecheck` does not type check the test files.** `tsconfig.test.json` extends `tsconfig.json` and does not override its `exclude`, so it inherits `"exclude": [..., "test", ...]`; in TypeScript the `exclude` wins over the `include`. The proof: `tsc --noEmit -p tsconfig.test.json --listFiles` lists `src/index.ts`, `src/errors.ts`, `src/services/api.ts`, `src/types.ts` and `vitest.config.mts` — and **no file under `test/`** | `tsconfig.test.json` | override the `exclude` in `tsconfig.test.json` (`"exclude": ["node_modules", "dist"]`), or drop `test` from the `exclude` of the base and let each configuration drive it through its own `include`. Until this is fixed, a type error in a test file reaches the branch without any gate noticing |
+| 10 | **blocking** | **no test asserts the HTTP method or the path of any endpoint.** The mock adapter records the requests, and nothing reads the array: the only occurrences of `requests` in the tree are inside the helper itself. A mutation of `appApi.put("/autoupload/import", ...)` into `appApi.post(...)` — the verb that the API answers with `404 Cannot POST /autoupload/import` — keeps the 14 tests green | `test/` | the assertions have to be added: the method and the path of every public method. PR #3 already brings `test/unit/api-methods.test.ts`, which closes it, but the gate of PR #1 stays weak until it is merged |
+| 11 | advisory | the description says that `npm audit` reported "2 high severity vulnerabilities" before the change. The number depends on the advisory database of the day: on 2026-10-20 the old tree reports one dependency with high severity and twenty advisories, and the new tree reports `found 0 vulnerabilities` | the description of PR #1 | keep the direction, soften the number |
+| 12 | advisory | the package has no `engines`, and the claim of ES5 compatibility is false **at the dependency level**: the emitted code of the package is ES5, but axios 1.20 ships `dist/browser/axios.cjs` with arrow functions, `class`, `const`, `let` and `async` (checked on the tree of the branch). The package also uses `Promise` and `URLSearchParams` (already in 1.0.6) and, **new in this PR**, `Object.setPrototypeOf` | `package.json` and the description | `"engines": { "node": ">=18" }`, state the supported environments in the README, and remove the claim of ES5 compatibility from the description |
+| 13 | advisory | the `try` block also covers the reading of the body, so a programming error is disguised as an API error | `src/index.ts` | §3.9, change 5 |
+| 14 | advisory | `data` is an alias of `body`, and a body that has a field of its own called `data` would not be copied onto the error | `src/errors.ts` | it is the documented behaviour (§3.7); the value stays reachable in `error.body.data` |
+| 15 | nit | the actions of the workflow are not pinned by commit | `.github/workflows/ci.yml` | optional for an internal fork |
+| 16 | nit | `prepublishOnly` is dead code while the package is `private: true` | `package.json` | harmless; it becomes live if the package is ever un-privated |
 
 ### 6.1 What is right in PR #1 and has to be kept
 
@@ -502,16 +535,19 @@ severity and the owner.
   even if the base URL is reconfigured at runtime;
 * the axios 1.x upgrade, and the removal of the `@types/axios` stub;
 * the `esModuleInterop`, the `lib` and the `skipLibCheck` of the `tsconfig.json`;
-* the vitest runner, the `typecheck` script and the separation between the `tsconfig.json`
-  (the build) and the `tsconfig.test.json` (the type check of the sources and of the tests);
+* the vitest runner, the `typecheck` script, and the **idea** of separating the
+  `tsconfig.json` (the build) from the `tsconfig.test.json` (the type check of the sources
+  and of the tests) — the separation is right, the `exclude` that breaks it is not
+  (finding 9);
 * the mock of the axios adapter: it exercises the real pipeline of axios, it honours the
   `validateStatus` and it records the requests — it is the reason the tests are worth
-  something;
+  something, and it is already prepared for the assertions of the finding 10;
 * the `export =` contract of the package and the public types exposed through the namespace;
 * the `private: true` and the metadata that points to the fork.
 
 The gates were executed on Node 22.15.0 against the branch: `npm ci`, `npm run typecheck`,
-`npm run build` and `npm test` — **14 tests, 2 files, all green**.
+`npm run build` and `npm test` — **14 tests, 2 files, all green**. The green result of the
+`typecheck` has to be read with the finding 9 in mind: today it does not cover the tests.
 
 ---
 
@@ -678,3 +714,6 @@ Everything below was produced against the code of the branch `fix/corrections` o
 | the shape of the body | the matrix of the QA (`qa/assertions.json`), 26 assertions | the catalogue of §3.8 |
 | the authorization URL | the matrix of the QA (`A25`) | the double slash and the single slash both answer `302` |
 | the published surface | `olx-br-1.0.6` extracted from the npm registry by the QA | the compat table of §3.3 and of §4.5 |
+| the type check of the tests | `npx tsc --noEmit -p tsconfig.test.json --listFiles` | the list has `src/*.ts` and `vitest.config.mts` and **no file under `test/`** |
+| the assertions of the requests | `grep requests test/` | the only matches are inside the helper; no test reads the array |
+| the ES5 claim | the browser bundle of the dependency, `node_modules/axios/dist/browser/axios.cjs` | it uses `=>`, `class`, `const`, `let` and `async`: the dependency is not ES5 |
