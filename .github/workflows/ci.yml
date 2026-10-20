@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # Runs for every pull request, no matter which branch it targets, so the
+  # stacked pull requests of this series are all verified.
   pull_request:
-    branches: [main]
 
 jobs:
   build:

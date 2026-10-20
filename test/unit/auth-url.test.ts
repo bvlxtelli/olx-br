@@ -23,13 +23,12 @@ describe('getAuthUrl', () => {
         expect(url.startsWith('https://auth.olx.com.br/oauth?')).toBe(true);
     });
 
-    it('keeps the parameters in the same order as before', () => {
+    it('keeps the query string of the published package, apart from the double slash', () => {
         const url = olx.getAuthUrl();
 
         expect(url).toBe(
             'https://auth.olx.com.br/oauth?response_type=code&client_id=client-id' +
-            '&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback' +
-            '&scope=basic_user_info%20autoupload'
+            '&redirect_uri=https://example.com/callback&scope=basic_user_info%20autoupload'
         );
     });
 
@@ -62,6 +61,17 @@ describe('getAuthUrl', () => {
         expect(params.get('redirect_uri')).toBe('https://example.com/callback');
     });
 
+    it('sends the redirect uri verbatim, exactly as it was registered', () => {
+        // The authorization server compares the redirect uri with the registered value,
+        // so it is not encoded. A redirect uri that carries a query string is not
+        // supported and has to be documented as such.
+        const olxWithQuery = new Olx('client-id', 'client-secret', 'https://example.com/cb');
+
+        const url = olxWithQuery.getAuthUrl();
+
+        expect(url).toContain('&redirect_uri=https://example.com/cb&scope=');
+    });
+
     it('appends the state when it is informed', () => {
         const params = new URL(olx.getAuthUrl(true, 'my-state')).searchParams;
 
@@ -72,16 +82,6 @@ describe('getAuthUrl', () => {
         const params = new URL(olx.getAuthUrl()).searchParams;
 
         expect(params.has('state')).toBe(false);
-    });
-
-    it('encodes the redirect uri so that it is not truncated by the server', () => {
-        const olxWithQuery = new Olx('client-id', 'client-secret', 'https://example.com/cb?x=1&y=2');
-
-        const url = olxWithQuery.getAuthUrl();
-        const params = new URL(url).searchParams;
-
-        expect(params.get('redirect_uri')).toBe('https://example.com/cb?x=1&y=2');
-        expect(params.get('y')).toBe(null);
     });
 
     it('encodes the client id', () => {

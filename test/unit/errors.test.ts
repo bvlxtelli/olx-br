@@ -161,4 +161,106 @@ describe('error handling', () => {
             expect(error.message).toBe('Request failed with status code 404');
         });
     });
+
+    it('reads the description of the OAuth shape as the message', async () => {
+        authApi.defaults.adapter = mockAdapter({
+            status: 400,
+            statusText: 'Bad Request',
+            data: { error: 'invalid_grant', error_description: 'Bad code' }
+        }).adapter;
+
+        const olx = new Olx('client-id', 'client-secret', 'https://example.com/callback');
+        const error = await olx.getToken('fake-code').catch((err) => err);
+
+        expect(error).toBeInstanceOf(Olx.OlxApiError);
+        expect(error.code).toBe('invalid_grant');
+        expect(error.message).toBe('Bad code');
+    });
+
+    it('keeps the error an OlxApiError when the body has a __proto__ key', async () => {
+        const polluted = JSON.parse('{"__proto__": {"polluted": true}, "ok": 1}');
+        appApi.defaults.adapter = mockAdapter({ status: 400, data: polluted }).adapter;
+
+        const error = await Olx.getAnuncios('fake-token').catch((err) => err);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error).toBeInstanceOf(Olx.OlxApiError);
+        expect(Object.getPrototypeOf(error)).toBe(Olx.OlxApiError.prototype);
+        expect(error.polluted).toBeUndefined();
+        expect(error.ok).toBe(1);
+    });
+
+    it('does not expose the cause as an enumerable field', async () => {
+        authApi.defaults.adapter = mockAdapter({
+            status: 400,
+            statusText: 'Bad Request',
+            data: { error: 'invalid_client' }
+        }).adapter;
+
+        const olx = new Olx('client-id', 'SUPER-SECRET-VALUE', 'https://example.com/callback');
+        const error = await olx.getToken('fake-code').catch((err) => err);
+
+        expect(error.cause).toBeDefined();
+        expect(Object.keys(error)).not.toContain('cause');
+        expect(JSON.stringify(error)).not.toContain('SUPER-SECRET-VALUE');
+    });
+
+    it('rejects when the token request answers 200 without a token', async () => {
+        authApi.defaults.adapter = mockAdapter({ status: 200, data: { error: 'invalid_client' } }).adapter;
+
+        const olx = new Olx('client-id', 'client-secret', 'https://example.com/callback');
+        const error = await olx.getToken('fake-code').catch((err) => err);
+
+        expect(error).toBeInstanceOf(Olx.OlxApiError);
+        expect(error.status).toBe(200);
+        expect(error.body).toEqual({ error: 'invalid_client' });
+        expect(error.message).toBe('The OLX authorization server did not return an access token.');
+    });
+
+    describe('the payload shapes of the API', () => {
+        it('keeps a body that is an array verbatim, without copying its items', async () => {
+            const body = [{ property: 'access_token', message: 'is missing and it is required' }];
+            appApi.defaults.adapter = mockAdapter({ status: 400, data: body }).adapter;
+
+            const error = await Olx.getBasicUserInfo('fake-token').catch((err) => err);
+
+            expect(error.body).toEqual(body);
+            expect(error.body[0].message).toBe('is missing and it is required');
+            expect(error.message).toBe('Request failed with status code 400');
+        });
+
+        it('keeps a body that is a text verbatim', async () => {
+            appApi.defaults.adapter = mockAdapter({
+                status: 404,
+                data: 'Cannot POST /autoupload/import'
+            }).adapter;
+
+            const error = await Olx.putAnuncios('fake-token', []).catch((err) => err);
+
+            expect(error.body).toBe('Cannot POST /autoupload/import');
+            expect(error.message).toBe('Request failed with status code 404');
+        });
+
+        it('reads the misspelled field of the paths that do not exist', async () => {
+            appApi.defaults.adapter = mockAdapter({
+                status: 500,
+                data: { mesage: '404 NOT_FOUND /autoservice/v1/webhooks' }
+            }).adapter;
+
+            const error = await Olx.getAnuncios('fake-token').catch((err) => err);
+
+            expect(error.code).toBeUndefined();
+            expect(error.message).toBe('404 NOT_FOUND /autoservice/v1/webhooks');
+        });
+
+        it('keeps the status when the body is empty', async () => {
+            appApi.defaults.adapter = mockAdapter({ status: 400, data: '' }).adapter;
+
+            const error = await Olx.getBasicUserInfo('fake-token').catch((err) => err);
+
+            expect(error.status).toBe(400);
+            expect(error.body).toBe('');
+            expect(error.message).toBe('Request failed with status code 400');
+        });
+    });
 });

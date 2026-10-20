@@ -38,26 +38,23 @@ class Olx {
     /**
      * Obtém a URL de autenticação da OLX, onde será solicitada a autorização do usuário.
      *
-     * Os parâmetros da URL são codificados, para que um `redirect_uri` com `&` ou `?` não
-     * seja truncado pelo servidor de autorização.
+     * O `client_id` e o `state` são enviados codificados, e o `redirect_uri` é enviado
+     * exatamente como foi registrado, porque o servidor de autorização o compara com o
+     * valor registrado. Por isso, o `redirect_uri` não pode conter `&`, `#`, `?` nem
+     * espaços.
      *
      * @param {boolean} [autoupload=true] Requerir acesso ao sistema de autouploads (Envio de anúncios de forma automática). Caso falso, terá apenas acesso aos dados básicos do usuário.
      * @param {string} state Fornece qualquer valor que pode ser útil a aplicação ao receber a resposta de requisição.
      * @returns {string} URL a ser usada para obter a autorização da OLX. 
      */
     getAuthUrl(autoupload: boolean = true, state?: string): string {
-        const scope = autoupload ? 'basic_user_info autoupload' : 'basic_user_info';
+        const scopes = autoupload ? ['basic_user_info', 'autoupload'] : ['basic_user_info'];
 
-        const params = new URLSearchParams();
-        params.set('response_type', 'code');
-        params.set('client_id', this.client_id);
-        params.set('redirect_uri', this.redirect_uri);
-        params.set('scope', scope);
-        if (state) params.set('state', state);
-
-        // `URLSearchParams` serializa um espaço como `+`, mas o escopo é enviado
-        // codificado em porcentagem, como antes.
-        const query = params.toString().replace(/\+/g, '%20');
+        let query = `response_type=code`;
+        query += `&client_id=${encodeURIComponent(this.client_id)}`;
+        query += `&redirect_uri=${this.redirect_uri}`;
+        query += `&scope=${scopes.join('%20')}`;
+        if (state) query += `&state=${encodeURIComponent(state)}`;
 
         return `${baseUrlOf(authApi, AUTH_BASE_URL)}/oauth?${query}`;
     }
@@ -74,12 +71,25 @@ class Olx {
         params.append('client_secret', this.client_secret);
         params.append('redirect_uri', this.redirect_uri);
         params.append('grant_type', "authorization_code");
+
+        let result;
         try {
-            const result = await authApi.post("/oauth/token", params);
-            return result.data.access_token;
+            result = await authApi.post("/oauth/token", params);
         } catch (err) {
             throw toOlxApiError(err);
         }
+
+        // A leitura da resposta fica fora do `try`, para que um erro de programação não
+        // seja disfarçado de erro da API. Uma resposta `200` sem o token é uma falha.
+        const token = result.data && result.data.access_token;
+        if (!token) {
+            throw new OlxApiError('The OLX authorization server did not return an access token.', {
+                status: result.status,
+                statusText: result.statusText,
+                body: result.data
+            });
+        }
+        return token;
     }
 
     /**
@@ -88,12 +98,13 @@ class Olx {
      * @returns {Promise<Object[]>} Lista de anuncios ativos
      */
     static async getAnuncios(access_token: string): Promise<any[]> {
+        let result;
         try {
-            const result = await appApi.post("/autoupload/published", { access_token });
-            return result.data;
+            result = await appApi.post("/autoupload/published", { access_token });
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -102,12 +113,13 @@ class Olx {
      * @returns {Promise<UserInfo>} Retorna os dados do usuário
      */
     static async getBasicUserInfo(access_token: string): Promise<UserInfo> {
+        let result;
         try {
-            const result = await appApi.post("/oauth_api/basic_user_info", { access_token });
-            return result.data;
+            result = await appApi.post("/oauth_api/basic_user_info", { access_token });
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -118,12 +130,13 @@ class Olx {
      */
     static async putAnuncios(access_token: string, anuncios: Object[]): Promise<any> {
         var data = { access_token, "ad_list": anuncios };
+        let result;
         try {
-            const result = await appApi.put("/autoupload/import", data);
-            return result.data;
+            result = await appApi.put("/autoupload/import", data);
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -141,12 +154,13 @@ class Olx {
             });
         });
         var data = { access_token, "ad_list": anuncios };
+        let result;
         try {
-            const result = await appApi.put("/autoupload/import", data);
-            return result.data;
+            result = await appApi.put("/autoupload/import", data);
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -156,12 +170,13 @@ class Olx {
      * @returns {Promise<any>} Retorno da requisição
      */
     static async getStatusAnuncio(access_token: string, token_anuncio: string): Promise<any> {
+        let result;
         try {
-            const result = await appApi.post(`/autoupload/import/${token_anuncio}`, { access_token });
-            return result.data;
+            result = await appApi.post(`/autoupload/import/${token_anuncio}`, { access_token });
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -177,12 +192,13 @@ class Olx {
             uri += `/${id_marca}`;
             if (id_modelo) uri += `/${id_modelo}`;
         }
+        let result;
         try {
-            const result = await appApi.post(uri, { access_token });
-            return result.data;
+            result = await appApi.post(uri, { access_token });
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -198,12 +214,13 @@ class Olx {
             uri += `/${id_marca}`;
             if (id_modelo) uri += `/${id_modelo}`;
         }
+        let result;
         try {
-            const result = await appApi.post(uri, { access_token });
-            return result.data;
+            result = await appApi.post(uri, { access_token });
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 
     /**
@@ -212,12 +229,13 @@ class Olx {
      * @returns {Promise<ModelosResponse>} Retorno da requisição
      */
     static async getCilindradas(access_token: string): Promise<ModelosResponse> {
+        let result;
         try {
-            const result = await appApi.post('/autoupload/moto_cubiccms_info', { access_token });
-            return result.data;
+            result = await appApi.post('/autoupload/moto_cubiccms_info', { access_token });
         } catch (err) {
             throw toOlxApiError(err);
         }
+        return result.data;
     }
 }
 

@@ -10,7 +10,10 @@
  *                   from the root of the body or from its nested `error` object.
  *  - `body`       : raw response body, exactly as returned by the API.
  *  - `data`       : alias of `body`, kept for convenience.
- *  - `cause`      : the original error thrown by axios, when there is one.
+ *  - `cause`      : the original error thrown by axios, when there is one. It is **not
+ *                   enumerable**, so it never reaches `JSON.stringify` nor the console
+ *                   (it carries the whole request, with the `client_secret` of the
+ *                   application in the case of the token request).
  *
  * Every field of the response body is also copied onto the error instance, so code written
  * against the old behaviour (which received the raw body) keeps working.
@@ -45,6 +48,17 @@ const RESERVED_ERROR_FIELDS = [
 ];
 
 /**
+ * Fields that are never copied from the body, for security reasons. A `__proto__` key
+ * would replace the prototype of the error (and `instanceof` would stop working), and
+ * `constructor` and `prototype` would shadow the internals of the class.
+ */
+const FORBIDDEN_ERROR_FIELDS = [
+    '__proto__',
+    'constructor',
+    'prototype'
+];
+
+/**
  * Error thrown by the `Olx` class when the OLX API answers with an error.
  */
 export class OlxApiError extends Error {
@@ -70,7 +84,17 @@ export class OlxApiError extends Error {
         this.code = init.code;
         this.body = init.body;
         this.data = init.body;
-        this.cause = init.cause;
+
+        // The `cause` holds the error thrown by axios, which carries the whole request
+        // (and, for the token request, the `client_secret` of the application). It is
+        // defined as non enumerable, exactly like the `cause` of the standard `Error`, so
+        // that it never reaches `JSON.stringify` nor the console.
+        Object.defineProperty(this, 'cause', {
+            value: init.cause,
+            enumerable: false,
+            writable: false,
+            configurable: true
+        });
 
         // Keeps `instanceof` working when the package is compiled to an older target.
         Object.setPrototypeOf(this, OlxApiError.prototype);
@@ -83,12 +107,22 @@ export class OlxApiError extends Error {
      * to read the raw body directly (e.g. `error.errors`) keep working.
      */
     private copyBodyFields(body: unknown): void {
-        if (!body || typeof body !== 'object') return;
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return;
 
         const fields = body as Record<string, unknown>;
         for (const key of Object.keys(fields)) {
             if (RESERVED_ERROR_FIELDS.indexOf(key) !== -1) continue;
-            (this as unknown as Record<string, unknown>)[key] = fields[key];
+            if (FORBIDDEN_ERROR_FIELDS.indexOf(key) !== -1) continue;
+
+            // `Object.defineProperty` is used instead of a plain assignment: a plain
+            // assignment of `__proto__` replaces the prototype of the error and the
+            // error stops being an `OlxApiError`.
+            Object.defineProperty(this, key, {
+                value: fields[key],
+                enumerable: true,
+                writable: true,
+                configurable: true
+            });
         }
     }
 }
@@ -124,9 +158,14 @@ function firstCode(candidates: unknown[]): string | number | undefined {
 }
 
 /**
- * Reads the error code reported by the API, accepting the field names used by the
- * different OLX endpoints (`code`, `reason` and `statusCode`), both at the root of the
- * body and inside the nested `error` object.
+ * Reads the error code reported by the API. The candidates are read in the order of the
+ * contract and the first one that is a string or a number wins:
+ *
+ * `body.code` → `body.reason` → `body.statusCode` → `body.error` (when it is a string) →
+ * `body.error.code` → `body.error.reason` → `body.error.statusCode`.
+ *
+ * The nested `error` object is the shape of the `autoupload` group, which answers with
+ * `{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND",...}}`.
  */
 function extractCode(body: unknown): string | number | undefined {
     if (!body || typeof body !== 'object') return undefined;
@@ -134,21 +173,24 @@ function extractCode(body: unknown): string | number | undefined {
     const fields = body as Record<string, unknown>;
     const nested = nestedErrorOf(body);
 
-    // The explicit codes come first: they describe the failure better than a status.
     return firstCode([
         fields.code,
         fields.reason,
+        fields.statusCode,
+        typeof fields.error === 'string' ? fields.error : undefined,
         nested && nested.code,
         nested && nested.reason,
-        fields.statusCode,
         nested && nested.statusCode
     ]);
 }
 
 /**
- * Reads the human readable message reported by the API. The `mesage` field is also
- * accepted because the OLX API misspells it on some error responses, and the nested
- * `error` object is read as well.
+ * Reads the human readable message reported by the API. The candidates are read in the
+ * order of the contract and the first one that is a non empty string wins:
+ *
+ * `body.message` → `body.error_description` → `body.error.message` (when `body.error` is
+ * an object) → `body.error` (when it is a string) → `body.mesage` (the misspelling used
+ * by the API) → the message of the original error → the generic fallback.
  */
 function extractMessage(body: unknown): string | undefined {
     if (!body || typeof body !== 'object') return undefined;
@@ -159,11 +201,9 @@ function extractMessage(body: unknown): string | undefined {
     const candidates = [
         fields.message,
         fields.error_description,
-        typeof fields.error === 'string' ? fields.error : undefined,
-        fields.mesage,
         nested && nested.message,
-        nested && nested.error_description,
-        nested && typeof nested.error === 'string' ? nested.error : undefined
+        typeof fields.error === 'string' ? fields.error : undefined,
+        fields.mesage
     ];
     for (const candidate of candidates) {
         if (typeof candidate === 'string' && candidate.length > 0) return candidate;
