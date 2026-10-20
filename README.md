@@ -2,6 +2,12 @@
 
 Esse é um pacote simples de integração com a [Api Importação de Anúncios](https://github.com/olxbr/ad_integration) da OLX Brasil hospedado no [NPM](https://www.npmjs.com/package/olx-br). Eu não tenho nenhuma afiliação com a OLX.
 
+> Este repositório é um fork de [ViniciusRossmann/olx-br](https://github.com/ViniciusRossmann/olx-br)
+> (MIT, autor original **Vinícius Rossmann Nunes**). A licença MIT e a atribuição ao autor
+> original foram preservadas e o nome do pacote (`olx-br`) não foi alterado. O fork é
+> marcado como `private` no `package.json` e **não é publicado no npm**, porque o nome
+> `olx-br` no npm pertence ao autor do projeto original.
+
 ## Instalação
 
 ```bash
@@ -74,6 +80,10 @@ porque o servidor de autorização o compara com o valor registrado. Por isso, o
 
 As mensagens dos compradores podem ser recebidas através de um webhook. O cliente de chat
 usa o token de acesso como *bearer token* e exige o escopo `chat`.
+
+> O token de acesso só é aceito no header `Authorization: Bearer <token>`. Enviado no header
+> `accessToken` ou no corpo da requisição, a API responde `400` com
+> `{"message":"Bad request: accessToken is required"}`.
 
 | Método | Requisição | Resposta |
 |---|---|---|
@@ -159,8 +169,14 @@ try {
 }
 ```
 
+<<<<<<< HEAD
 O corpo da resposta também tem os seus campos copiados para o erro, então o código que lia o
 corpo diretamente (`err.message`, `err.errors`, ...) continua funcionando.
+=======
+<<<<<<< HEAD
+O código e a mensagem são lidos tanto na raiz do corpo quanto dentro do objeto `error`, que
+é o formato usado pelos endpoints de autoupload:
+>>>>>>> bcfed13 (test: cover where the chat token may be sent and document the error formats)
 
 **Atenção ao `cause`:** ele guarda o erro original do axios, que carrega a requisição
 completa. As credenciais do aplicativo (`client_secret`, token de acesso e o header
@@ -204,6 +220,45 @@ O código compilado (`dist/`) continua mirando em ES5, mas a dependência `axios
 
 - **Node.js**: 18 ou superior. O CI roda em Node 20, 22 e 24.
 - **Navegadores**: qualquer navegador com suporte a ES2017 ou superior (Chrome, Edge, Firefox e Safari atuais). O Internet Explorer não é suportado.
+=======
+### Erro de aplicação e erro HTTP
+
+A API da OLX reporta o erro de duas maneiras diferentes:
+
+- **Erro de aplicação**: a API responde `200` e o erro vem dentro do payload, no campo
+  `statusCode`. Nesse caso a promise **resolve** com esse payload.
+
+  ```javascript
+  const res = await Olx.putAnuncios(access_token, [anuncio]);
+  if (res.statusCode !== 0) {
+    console.log(res.statusCode);    //ex: -6
+    console.log(res.statusMessage); //ex: "Without permission"
+  }
+  ```
+
+- **Erro HTTP**: a API responde `4xx` ou `5xx`. Nesse caso a promise **rejeita**, e o erro
+  carrega o payload cru da resposta em `err.body` (também disponível como `err.data`).
+
+### Formatos de erro da API
+
+Cada endpoint nomeia o erro de um jeito, e a API devolve **7 formatos diferentes** de resposta
+de erro. Todos são preservados em `err.body`, e os campos do corpo também são copiados para o
+erro — assim é possível ler `err.message`, `err.reason`, `err.errors` etc. direto na exceção:
+
+| endpoint | status | corpo |
+|---|---|---|
+| `/autoservice/v1/chat` (sem token no header) | `400` | `{"message":"Bad request: accessToken is required"}` |
+| `/autoservice/v1/chat` (token inválido) | `401` | `{"message":"Unauthorized"}` |
+| `/autoservice/v1/lead` | `401` | `{"reason":"ACCESS_DENIED","message":"Check the client authentication token."}` |
+| `/autoupload/import` (sem permissão) | `200` | `{"token":null,"statusCode":-6,"statusMessage":"Without permission","errors":[]}` |
+| `/autoupload/published` | `404` | `{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"...","statusCode":404}}` |
+| `/oauth_api/basic_user_info` | `400` | corpo vazio |
+| `auth.olx.com.br/oauth/token` | `400` | `{"error":"invalid_client"}` |
+
+> **Pendente de decisão (Hex):** o alias final do corpo do erro (hoje `body` e `data`), a
+> versão do pacote (`2.0.0` ou `1.0.6`) e a seção de migração ainda não foram definidos.
+> Esta parte do README será completada quando o contrato for fechado.
+>>>>>>> 31a8404 (test: cover where the chat token may be sent and document the error formats)
 
 ## Desenvolvimento
 
@@ -217,7 +272,12 @@ npm run test:coverage     # roda a suíte e gera o relatório de cobertura
 ```
 
 Os testes de integração são ignorados por padrão e usam credenciais falsas: eles verificam
-o status HTTP e o corpo da resposta da API real, sem precisar de nenhuma credencial.
+o status HTTP e o corpo da resposta da API real, sem precisar de nenhuma credencial. Para
+habilitá-los, use a variável de ambiente `OLX_LIVE=1`:
+
+```bash
+OLX_LIVE=1 npm run test:integration
+```
 
 ## Contato
 
