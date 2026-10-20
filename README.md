@@ -41,7 +41,7 @@ const anuncios = await Olx.getAnuncios(access_token);
 ```
 A lista completa de métodos pode ser vista [aqui](https://github.com/ViniciusRossmann/olx-br/blob/main/src/index.ts).
 
-<## Escopos OAuth
+## Escopos OAuth
 
 `getAuthUrl()` aceita, além do booleano, os escopos que devem ser solicitados. As opções
 disponíveis são `basic_user_info`, `autoupload`, `chat` e `autoservice`.
