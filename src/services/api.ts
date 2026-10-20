@@ -22,6 +22,17 @@ export const appApi = axios.create({
 });
 
 /**
+ * Client of the autoservice API (chat and automatic service).
+ *
+ * It uses the same host as the application API, but it is kept as a separate instance so
+ * that the automatic service can be configured (timeout, headers, ...) on its own.
+ */
+export const chatApi = axios.create({
+    baseURL: APP_BASE_URL,
+    headers: { 'Content-Type': 'application/json' }
+});
+
+/**
  * Returns the base URL of an axios instance without trailing slashes, so that a path can
  * be safely appended to it.
  *

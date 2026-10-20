@@ -4,9 +4,62 @@
  * MIT Licensed
  */
 
-import { authApi, appApi, baseUrlOf, AUTH_BASE_URL } from './services/api';
-import { UserInfo, ModelosResponse } from './types';
+import { authApi, appApi, chatApi, baseUrlOf, AUTH_BASE_URL } from './services/api';
+import { UserInfo, ModelosResponse, ChatMessage } from './types';
 import { OlxApiError, toOlxApiError } from './errors';
+
+/**
+ * Escopos OAuth disponíveis para a aplicação.
+ *
+ * Os nomes dos escopos diferenciam maiúsculas de minúsculas e a ordem em que são enviados
+ * não importa para o servidor de autorização da OLX.
+ */
+const SCOPES = {
+    /** Dados básicos do usuário (nome e email). Sempre solicitado. */
+    basicUserInfo: 'basic_user_info',
+    /** Envio automático de anúncios. */
+    autoupload: 'autoupload',
+    /** Mensagens de chat dos compradores. */
+    chat: 'chat',
+    /** Serviço automático (webhooks de chat). */
+    autoservice: 'autoservice'
+} as const;
+
+/**
+ * Monta a lista de escopos que será enviada na URL de autenticação.
+ *
+ * @param {boolean|string|string[]} request Escopos solicitados. `true` mantém o
+ *   comportamento original (`basic_user_info` e `autoupload`), `false` solicita apenas
+ *   `basic_user_info` e uma string (ou array) solicita os escopos informados.
+ * @returns {string[]} Lista de escopos, sem repetições.
+ */
+function resolveScopes(request: boolean | string | string[]): string[] {
+    const scopes: string[] = [];
+
+    const add = (scope: string) => {
+        const trimmed = scope.trim();
+        if (trimmed && scopes.indexOf(trimmed) === -1) scopes.push(trimmed);
+    };
+
+    if (typeof request === 'string') {
+        // Os escopos podem vir separados por qualquer espaço em branco.
+        request.split(/\s+/).forEach(add);
+    } else if (Array.isArray(request)) {
+        request.forEach(add);
+    } else {
+        // Um booleano (ou qualquer outro valor vindo de um caller em JavaScript) mantém o
+        // comportamento das versões anteriores: um valor verdadeiro solicita o escopo
+        // `autoupload` e um falso apenas o `basic_user_info`.
+        add(SCOPES.basicUserInfo);
+        if (request) add(SCOPES.autoupload);
+        return scopes;
+    }
+
+    // O escopo base da aplicação é sempre solicitado.
+    if (scopes.indexOf(SCOPES.basicUserInfo) === -1) scopes.unshift(SCOPES.basicUserInfo);
+
+    return scopes;
+}
 
 class Olx {
     client_id: string;
@@ -18,6 +71,14 @@ class Olx {
      * code and the response body of the failed request.
      */
     static readonly OlxApiError = OlxApiError;
+
+    /**
+     * OAuth scopes available for the application.
+     *
+     * The scope names are case sensitive and the order in which they are sent does not
+     * matter to the OLX authorization server.
+     */
+    static readonly SCOPES = SCOPES;
 
     /**
      * @constructor
@@ -38,22 +99,28 @@ class Olx {
     /**
      * Obtém a URL de autenticação da OLX, onde será solicitada a autorização do usuário.
      *
+     * O primeiro parâmetro aceita, além do booleano, uma lista de escopos (separados por
+     * espaço) ou um array de escopos. O escopo `basic_user_info` é sempre solicitado, por
+     * ser o escopo base da aplicação.
+     *
      * O `client_id` e o `state` são enviados codificados, e o `redirect_uri` é enviado
      * exatamente como foi registrado, porque o servidor de autorização o compara com o
      * valor registrado. Por isso, o `redirect_uri` não pode conter `&`, `#`, `?` nem
      * espaços.
      *
-     * @param {boolean} [autoupload=true] Requerir acesso ao sistema de autouploads (Envio de anúncios de forma automática). Caso falso, terá apenas acesso aos dados básicos do usuário.
+     * @param {boolean|string|string[]} [scopes=true] Requerir acesso ao sistema de autouploads (Envio de anúncios de forma automática). Caso falso, terá apenas acesso aos dados básicos do usuário. Também aceita os escopos a serem solicitados: `chat`, `autoservice`, `autoupload` e `basic_user_info`.
      * @param {string} state Fornece qualquer valor que pode ser útil a aplicação ao receber a resposta de requisição.
      * @returns {string} URL a ser usada para obter a autorização da OLX. 
      */
-    getAuthUrl(autoupload: boolean = true, state?: string): string {
-        const scopes = autoupload ? ['basic_user_info', 'autoupload'] : ['basic_user_info'];
+    getAuthUrl(scopes?: boolean | string | string[], state?: string): string {
+        // O padrão é aplicado no corpo (e não na assinatura) para que a aridade do método
+        // seja a mesma no pacote compilado e no código-fonte executado pelos testes.
+        const requested = resolveScopes(scopes === undefined ? true : scopes);
 
         let query = `response_type=code`;
         query += `&client_id=${encodeURIComponent(this.client_id)}`;
         query += `&redirect_uri=${this.redirect_uri}`;
-        query += `&scope=${scopes.join('%20')}`;
+        query += `&scope=${requested.join('%20')}`;
         if (state) query += `&state=${encodeURIComponent(state)}`;
 
         return `${baseUrlOf(authApi, AUTH_BASE_URL)}/oauth?${query}`;
@@ -237,6 +304,67 @@ class Olx {
         }
         return result.data;
     }
+
+    /**
+     * Ativa o webhook de chat da integração (API de autoservice).
+     *
+     * A OLX envia as mensagens dos compradores para a URL informada. A primeira ativação
+     * responde 201 e uma atualização posterior responde 200.
+     *
+     * @param {string} access_token Chave de acesso do usuário (escopo `chat`)
+     * @param {string} webhook URL que receberá as mensagens de chat
+     * @returns {Promise<any>} Retorno da requisição
+     */
+    static async ativarWebhookChat(access_token: string, webhook: string): Promise<any> {
+        try {
+            const result = await chatApi.post('/autoservice/v1/chat', { webhook }, {
+                headers: { Authorization: `Bearer ${access_token}` }
+            });
+            return result.data;
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+    }
+
+    /**
+     * Desativa o webhook de chat da integração (API de autoservice).
+     *
+     * @param {string} access_token Chave de acesso do usuário (escopo `chat`)
+     * @returns {Promise<any>} Retorno da requisição
+     */
+    static async desativarWebhookChat(access_token: string): Promise<any> {
+        try {
+            const result = await chatApi.delete('/autoservice/v1/chat', {
+                headers: { Authorization: `Bearer ${access_token}` }
+            });
+            return result.data;
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+    }
+
+    /**
+     * Envia uma resposta para uma conversa de chat (API de autoservice).
+     *
+     * @param {string} access_token Chave de acesso do usuário (escopo `chat`)
+     * @param {ChatMessage} mensagem Mensagem a ser enviada, com o texto da resposta, o id da
+     *   mensagem que está sendo respondida e o id da conversa.
+     * @returns {Promise<any>} Retorno da requisição
+     */
+    static async responderChat(access_token: string, mensagem: ChatMessage): Promise<any> {
+        try {
+            const result = await chatApi.post('/autoservice/v1/chat/send', {
+                textMessage: mensagem.textMessage,
+                messageId: mensagem.messageId,
+                chatId: mensagem.chatId
+            }, {
+                headers: { Authorization: `Bearer ${access_token}` }
+            });
+            return result.data;
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+    }
 }
 
 /**
@@ -246,6 +374,7 @@ class Olx {
 namespace Olx {
     export type UserInfo = import('./types').UserInfo;
     export type ModelosResponse = import('./types').ModelosResponse;
+    export type ChatMessage = import('./types').ChatMessage;
     export type OlxApiError = import('./errors').OlxApiError;
 }
 
