@@ -87,6 +87,10 @@
             },
             "expectHeaders": {
                 "Authorization": null
+            },
+            "mockResponse": {
+                "access_token": "granted-token",
+                "expires_in": 10800
             }
         },
         {

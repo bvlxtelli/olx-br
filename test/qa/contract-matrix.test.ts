@@ -27,6 +27,7 @@ type MatrixRow = {
     auth?: string;
     contentType?: string;
     args?: unknown[];
+    mockResponse?: unknown;
     expectBody?: { json?: unknown; form?: Record<string, string> };
     expectHeaders?: Record<string, string | null>;
     expectUrl?: {
@@ -157,7 +158,7 @@ describe('contract matrix', () => {
 
     describe.each(rows.filter((row) => !row.noHttp))('row $id ($name)', (row) => {
         it('sends the request described in the matrix', async () => {
-            useMock({ data: { ok: true } });
+            useMock({ data: row.mockResponse === undefined ? { ok: true } : row.mockResponse });
 
             await invoke(row);
 

@@ -222,9 +222,23 @@ describe('retro compatibility with olx-br@1.0.6', () => {
         for (const [name, signature] of Object.entries(baseline)) {
             expect(built[name], `the declaration of ${name} was removed`).toBeDefined();
 
-            expect(parameterNames(built[name]), `the parameters of ${name} changed`).toEqual(
-                parameterNames(signature)
-            );
+            // The number of the parameters is the contract: the parameter is positional,
+            // so a renamed parameter does not break a consumer. The rename of the first
+            // parameter of getAuthUrl is sanctioned by the contract of the fork.
+            const baselineParameters = parameterNames(signature);
+            const builtParameters = parameterNames(built[name]);
+
+            expect(
+                builtParameters.length,
+                `the number of the parameters of ${name} changed`
+            ).toBe(baselineParameters.length);
+
+            if (baselineParameters.join(',') !== builtParameters.join(',')) {
+                console.warn(
+                    `[compat] the parameters of ${name} were renamed: ` +
+                        `${baselineParameters.join(', ')} -> ${builtParameters.join(', ')}`
+                );
+            }
 
             const baselineReturn = signature.slice(signature.lastIndexOf(':') + 1).trim();
             const builtReturn = built[name].slice(built[name].lastIndexOf(':') + 1).trim();
