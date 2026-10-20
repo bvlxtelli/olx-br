@@ -24,6 +24,8 @@ describe('error consistency', () => {
         chatApi.defaults.adapter = originalChatAdapter;
     });
 
+    // The tuple type is explicit: the array of pairs would otherwise be inferred as
+    // `(string | (() => Promise<any>))[]` and the call would not be callable.
     const methods = (): [string, () => Promise<any>][] => [
         ['getAnuncios', () => Olx.getAnuncios('fake-token')],
         ['getBasicUserInfo', () => Olx.getBasicUserInfo('fake-token')],

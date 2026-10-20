@@ -32,6 +32,15 @@ describe('getAuthUrl', () => {
         );
     });
 
+    it('keeps the query string of the published package when the autoupload scope is off', () => {
+        const url = olx.getAuthUrl(false);
+
+        expect(url).toBe(
+            'https://auth.olx.com.br/oauth?response_type=code&client_id=client-id' +
+            '&redirect_uri=https://example.com/callback&scope=basic_user_info'
+        );
+    });
+
     it('keeps working when the base URL has a trailing slash', () => {
         authApi.defaults.baseURL = `${AUTH_BASE_URL}/`;
 
@@ -84,7 +93,7 @@ describe('getAuthUrl', () => {
         expect(params.has('state')).toBe(false);
     });
 
-   it('encodes the client id', () => {
+    it('encodes the client id', () => {
         const olxWithSpecialId = new Olx('client id&other', 'client-secret', 'https://example.com/cb');
 
         const url = olxWithSpecialId.getAuthUrl();
