@@ -84,7 +84,7 @@ describe('getAuthUrl', () => {
         expect(params.has('state')).toBe(false);
     });
 
-    it('encodes the client id', () => {
+<    it('encodes the client id', () => {
         const olxWithSpecialId = new Olx('client id&other', 'client-secret', 'https://example.com/cb');
 
         const url = olxWithSpecialId.getAuthUrl();
@@ -107,5 +107,13 @@ describe('getAuthUrl', () => {
 
         expect(url).toContain('scope=basic_user_info%20autoupload');
         expect(url).not.toContain('scope=basic_user_info+autoupload');
+    });
+
+    it('keeps the default base URL when the instance has none configured', () => {
+        authApi.defaults.baseURL = undefined;
+
+        const url = olx.getAuthUrl();
+
+        expect(url.startsWith('https://auth.olx.com.br/oauth?')).toBe(true);
     });
 });
