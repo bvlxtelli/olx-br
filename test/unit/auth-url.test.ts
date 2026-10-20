@@ -20,9 +20,16 @@ describe('getAuthUrl', () => {
         const url = olx.getAuthUrl();
 
         expect(url).not.toContain('.br//');
+        expect(url.startsWith('https://auth.olx.com.br/oauth?')).toBe(true);
+    });
+
+    it('keeps the parameters in the same order as before', () => {
+        const url = olx.getAuthUrl();
+
         expect(url).toBe(
             'https://auth.olx.com.br/oauth?response_type=code&client_id=client-id' +
-            '&redirect_uri=https://example.com/callback&scope=basic_user_info%20autoupload'
+            '&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback' +
+            '&scope=basic_user_info%20autoupload'
         );
     });
 
@@ -65,5 +72,40 @@ describe('getAuthUrl', () => {
         const params = new URL(olx.getAuthUrl()).searchParams;
 
         expect(params.has('state')).toBe(false);
+    });
+
+    it('encodes the redirect uri so that it is not truncated by the server', () => {
+        const olxWithQuery = new Olx('client-id', 'client-secret', 'https://example.com/cb?x=1&y=2');
+
+        const url = olxWithQuery.getAuthUrl();
+        const params = new URL(url).searchParams;
+
+        expect(params.get('redirect_uri')).toBe('https://example.com/cb?x=1&y=2');
+        expect(params.get('y')).toBe(null);
+    });
+
+    it('encodes the client id', () => {
+        const olxWithSpecialId = new Olx('client id&other', 'client-secret', 'https://example.com/cb');
+
+        const url = olxWithSpecialId.getAuthUrl();
+        const params = new URL(url).searchParams;
+
+        expect(params.get('client_id')).toBe('client id&other');
+        expect(params.get('other')).toBe(null);
+    });
+
+    it('encodes the state', () => {
+        const url = olx.getAuthUrl(true, 'a b&c');
+        const params = new URL(url).searchParams;
+
+        expect(params.get('state')).toBe('a b&c');
+        expect(params.get('c')).toBe(null);
+    });
+
+    it('keeps the scope percent encoded instead of using a plus sign', () => {
+        const url = olx.getAuthUrl();
+
+        expect(url).toContain('scope=basic_user_info%20autoupload');
+        expect(url).not.toContain('scope=basic_user_info+autoupload');
     });
 });

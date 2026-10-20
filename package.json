@@ -30,5 +30,8 @@
     "repository": {
         "type": "git",
         "url": "git+https://github.com/bvlxtelli/olx-br.git"
+    },
+    "engines": {
+        "node": ">=18"
     }
 }

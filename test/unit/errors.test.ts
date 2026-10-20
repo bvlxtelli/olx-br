@@ -98,4 +98,67 @@ describe('error handling', () => {
 
         expect(error).toBe(original);
     });
+
+    describe('nested error body', () => {
+        // The autoupload endpoints answer with the error nested inside an `error` object.
+        const nestedBody = {
+            status: 'ERROR',
+            error: {
+                reason: 'ACCESS_TOKEN_NOT_FOUND',
+                message: 'Response code 404 (Not Found)',
+                statusCode: 404
+            }
+        };
+
+        const methods = [
+            ['getAnuncios', () => Olx.getAnuncios('fake-token')],
+            ['getModelosCarros', () => Olx.getModelosCarros('fake-token')],
+            ['getModelosMotos', () => Olx.getModelosMotos('fake-token')],
+            ['getCilindradas', () => Olx.getCilindradas('fake-token')]
+        ] as const;
+
+        methods.forEach(([name, call]) => {
+            it(`reads the code and the message of ${name} from the nested error`, async () => {
+                appApi.defaults.adapter = mockAdapter({
+                    status: 404,
+                    statusText: 'Not Found',
+                    data: nestedBody
+                }).adapter;
+
+                const error = await call().catch((err) => err);
+
+                expect(error).toBeInstanceOf(Olx.OlxApiError);
+                expect(error.status).toBe(404);
+                expect(error.code).toBe('ACCESS_TOKEN_NOT_FOUND');
+                expect(error.message).toBe('Response code 404 (Not Found)');
+                expect(error.body).toEqual(nestedBody);
+            });
+        });
+
+        it('keeps the fields of the body available on the error', async () => {
+            appApi.defaults.adapter = mockAdapter({
+                status: 404,
+                statusText: 'Not Found',
+                data: nestedBody
+            }).adapter;
+
+            const error = await Olx.getAnuncios('fake-token').catch((err) => err);
+
+            expect(error.status).toBe(404);
+            expect(error.error).toEqual(nestedBody.error);
+        });
+
+        it('falls back to the generic message when the nested error has no message', async () => {
+            appApi.defaults.adapter = mockAdapter({
+                status: 404,
+                statusText: 'Not Found',
+                data: { status: 'ERROR', error: { reason: 'ACCESS_TOKEN_NOT_FOUND' } }
+            }).adapter;
+
+            const error = await Olx.getAnuncios('fake-token').catch((err) => err);
+
+            expect(error.code).toBe('ACCESS_TOKEN_NOT_FOUND');
+            expect(error.message).toBe('Request failed with status code 404');
+        });
+    });
 });

@@ -8,5 +8,9 @@
         "src",
         "test",
         "vitest.config.mts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
     ]
 }

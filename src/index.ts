@@ -37,15 +37,28 @@ class Olx {
 
     /**
      * Obtém a URL de autenticação da OLX, onde será solicitada a autorização do usuário.
+     *
+     * Os parâmetros da URL são codificados, para que um `redirect_uri` com `&` ou `?` não
+     * seja truncado pelo servidor de autorização.
+     *
      * @param {boolean} [autoupload=true] Requerir acesso ao sistema de autouploads (Envio de anúncios de forma automática). Caso falso, terá apenas acesso aos dados básicos do usuário.
      * @param {string} state Fornece qualquer valor que pode ser útil a aplicação ao receber a resposta de requisição.
      * @returns {string} URL a ser usada para obter a autorização da OLX. 
      */
     getAuthUrl(autoupload: boolean = true, state?: string): string {
-        let scope = 'basic_user_info';
-        if (autoupload) scope += '%20autoupload';
-        let query = `response_type=code&client_id=${this.client_id}&redirect_uri=${this.redirect_uri}&scope=${scope}`;
-        if (state) query += `&state=${state}`;
+        const scope = autoupload ? 'basic_user_info autoupload' : 'basic_user_info';
+
+        const params = new URLSearchParams();
+        params.set('response_type', 'code');
+        params.set('client_id', this.client_id);
+        params.set('redirect_uri', this.redirect_uri);
+        params.set('scope', scope);
+        if (state) params.set('state', state);
+
+        // `URLSearchParams` serializa um espaço como `+`, mas o escopo é enviado
+        // codificado em porcentagem, como antes.
+        const query = params.toString().replace(/\+/g, '%20');
+
         return `${baseUrlOf(authApi, AUTH_BASE_URL)}/oauth?${query}`;
     }
 

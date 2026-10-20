@@ -6,7 +6,8 @@
  *
  *  - `status`     : HTTP status code returned by the API (401, 400, 500, ...).
  *  - `statusText` : HTTP status text returned by the API.
- *  - `code`       : error code reported by the API (`code`, `reason` or `statusCode`).
+ *  - `code`       : error code reported by the API (`code`, `reason` or `statusCode`), read
+ *                   from the root of the body or from its nested `error` object.
  *  - `body`       : raw response body, exactly as returned by the API.
  *  - `data`       : alias of `body`, kept for convenience.
  *  - `cause`      : the original error thrown by axios, when there is one.
@@ -93,14 +94,29 @@ export class OlxApiError extends Error {
 }
 
 /**
- * Reads the error code reported by the API, accepting the field names used by the
- * different OLX endpoints (`code`, `reason` and `statusCode`).
+ * Returns the nested `error` object of a response body, when the API answers with the
+ * nested shape used by the autoupload endpoints:
+ *
+ * ```json
+ * {"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"...","statusCode":404}}
+ * ```
+ *
+ * @param {unknown} body Raw response body returned by the API.
+ * @returns {Record<string, unknown>|undefined} The nested error object, when there is one.
  */
-function extractCode(body: unknown): string | number | undefined {
+function nestedErrorOf(body: unknown): Record<string, unknown> | undefined {
     if (!body || typeof body !== 'object') return undefined;
 
-    const fields = body as Record<string, unknown>;
-    const candidates = [fields.code, fields.reason, fields.statusCode];
+    const nested = (body as Record<string, unknown>).error;
+    if (!nested || typeof nested !== 'object') return undefined;
+
+    return nested as Record<string, unknown>;
+}
+
+/**
+ * Returns the first candidate that is a usable error code.
+ */
+function firstCode(candidates: unknown[]): string | number | undefined {
     for (const candidate of candidates) {
         if (typeof candidate === 'string' || typeof candidate === 'number') return candidate;
     }
@@ -108,14 +124,47 @@ function extractCode(body: unknown): string | number | undefined {
 }
 
 /**
+ * Reads the error code reported by the API, accepting the field names used by the
+ * different OLX endpoints (`code`, `reason` and `statusCode`), both at the root of the
+ * body and inside the nested `error` object.
+ */
+function extractCode(body: unknown): string | number | undefined {
+    if (!body || typeof body !== 'object') return undefined;
+
+    const fields = body as Record<string, unknown>;
+    const nested = nestedErrorOf(body);
+
+    // The explicit codes come first: they describe the failure better than a status.
+    return firstCode([
+        fields.code,
+        fields.reason,
+        nested && nested.code,
+        nested && nested.reason,
+        fields.statusCode,
+        nested && nested.statusCode
+    ]);
+}
+
+/**
  * Reads the human readable message reported by the API. The `mesage` field is also
- * accepted because the OLX API misspells it on some error responses.
+ * accepted because the OLX API misspells it on some error responses, and the nested
+ * `error` object is read as well.
  */
 function extractMessage(body: unknown): string | undefined {
     if (!body || typeof body !== 'object') return undefined;
 
     const fields = body as Record<string, unknown>;
-    const candidates = [fields.message, fields.error_description, fields.error, fields.mesage];
+    const nested = nestedErrorOf(body);
+
+    const candidates = [
+        fields.message,
+        fields.error_description,
+        typeof fields.error === 'string' ? fields.error : undefined,
+        fields.mesage,
+        nested && nested.message,
+        nested && nested.error_description,
+        nested && typeof nested.error === 'string' ? nested.error : undefined
+    ];
     for (const candidate of candidates) {
         if (typeof candidate === 'string' && candidate.length > 0) return candidate;
     }
