@@ -147,23 +147,6 @@ describe.skipIf(!enabled)('OLX API (integration)', () => {
         expect(response.data.error.statusCode).toBe(404);
     });
 
-    it('extracts the code and the message of the nested error of the published ads', async () => {
-        const error = await Olx.getAnuncios(FAKE_TOKEN).catch((err) => err);
-
-        expect(error).toBeInstanceOf(Olx.OlxApiError);
-        expect(error.status).toBe(404);
-        expect(error.code).toBe('ACCESS_TOKEN_NOT_FOUND');
-        expect(error.message).toBe('Response code 404 (Not Found)');
-        expect(error.body).toEqual({
-            status: 'ERROR',
-            error: {
-                reason: 'ACCESS_TOKEN_NOT_FOUND',
-                message: 'Response code 404 (Not Found)',
-                statusCode: 404
-            }
-        });
-    });
-
     it('extracts the code and the message of the nested error of the live API', async () => {
         // The API answers 404 with the error nested inside an `error` object. The
         // extraction has to read it: `code` is `ACCESS_TOKEN_NOT_FOUND` and the
