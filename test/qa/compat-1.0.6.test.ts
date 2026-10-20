@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
 import * as path from 'path';
+import OlxSource from '../../src/index';
 
 /**
  * Retro compatibility gate against the published package `olx-br@1.0.6`.
@@ -21,8 +22,8 @@ const repoRoot = path.resolve(here, '..', '..');
 
 const builtEntry = path.join(repoRoot, 'dist', 'index.js');
 const builtDeclaration = path.join(repoRoot, 'dist', 'index.d.ts');
-const baselineEntry = path.join(repoRoot, 'qa', 'baseline', 'olx-br-1.0.6.index.js');
-const baselineDeclaration = path.join(repoRoot, 'qa', 'baseline', 'olx-br-1.0.6.index.d.ts');
+const baselineEntry = path.join(repoRoot, 'qa', 'baseline', 'dist', 'index.js');
+const baselineDeclaration = path.join(repoRoot, 'qa', 'baseline', 'dist', 'index.d.ts');
 
 const requireFromHere = createRequire(path.join(repoRoot, 'package.json'));
 
@@ -35,6 +36,33 @@ function requireBuilt(): typeof import('../../src/index') {
         );
     }
     return requireFromHere(builtEntry);
+}
+
+/**
+ * The newest modification time of the sources.
+ *
+ * The gate compares the **built** package. A build that is older than the source would
+ * compare a package that nobody is going to publish, and a defect in the source would
+ * slip through the gate. The build is therefore required to be up to date.
+ */
+function newestSourceTime(): number {
+    let newest = 0;
+
+    const walk = (folder: string) => {
+        for (const entry of fs.readdirSync(folder)) {
+            const full = path.join(folder, entry);
+            if (fs.statSync(full).isDirectory()) {
+                walk(full);
+                continue;
+            }
+            if (!full.endsWith('.ts')) continue;
+            newest = Math.max(newest, fs.statSync(full).mtimeMs);
+        }
+    };
+
+    walk(path.join(repoRoot, 'src'));
+
+    return newest;
 }
 
 type Surface = {
@@ -116,6 +144,21 @@ describe('retro compatibility with olx-br@1.0.6', () => {
         expect(manifest.package).toBe('olx-br@1.0.6');
     });
 
+    it('compares a build that is up to date with the source', () => {
+        if (!fs.existsSync(builtEntry)) {
+            throw new Error('the package is not built. Run "npm run build" before the tests.');
+        }
+
+        const built = fs.statSync(builtEntry).mtimeMs;
+        const source = newestSourceTime();
+
+        expect(
+            built,
+            'the built package is older than the source. Run "npm run build" before the tests, ' +
+                'otherwise the gate compares a package that nobody is going to publish.'
+        ).toBeGreaterThanOrEqual(source);
+    });
+
     it('keeps every static method of the published package', () => {
         const baseline = surfaceOf(requireFromHere(baselineEntry));
         const built = surfaceOf(requireBuilt());
@@ -126,6 +169,16 @@ describe('retro compatibility with olx-br@1.0.6', () => {
         }
     });
 
+    it('keeps every static method of the published package in the source', () => {
+        const baseline = surfaceOf(requireFromHere(baselineEntry));
+        const source = surfaceOf(OlxSource);
+
+        for (const [name, arity] of Object.entries(baseline.statics)) {
+            expect(source.statics[name], `the static method ${name} was removed`).toBeDefined();
+            expect(source.statics[name], `the arity of ${name} changed`).toBe(arity);
+        }
+    });
+
     it('keeps every instance method of the published package', () => {
         const baseline = surfaceOf(requireFromHere(baselineEntry));
         const built = surfaceOf(requireBuilt());
@@ -133,6 +186,16 @@ describe('retro compatibility with olx-br@1.0.6', () => {
         for (const [name, arity] of Object.entries(baseline.prototype)) {
             expect(built.prototype[name], `the method ${name} was removed`).toBeDefined();
             expect(built.prototype[name], `the arity of ${name} changed`).toBe(arity);
+        }
+    });
+
+    it('keeps every instance method of the published package in the source', () => {
+        const baseline = surfaceOf(requireFromHere(baselineEntry));
+        const source = surfaceOf(OlxSource);
+
+        for (const [name, arity] of Object.entries(baseline.prototype)) {
+            expect(source.prototype[name], `the method ${name} was removed`).toBeDefined();
+            expect(source.prototype[name], `the arity of ${name} changed`).toBe(arity);
         }
     });
 
@@ -177,6 +240,13 @@ describe('retro compatibility with olx-br@1.0.6', () => {
         expect(builtModule.default).toBeUndefined();
         expect(builtModule.OlxApiError).toBeDefined();
         expect(fs.readFileSync(builtDeclaration, 'utf8')).toMatch(/export = Olx;/);
+    });
+
+    it('keeps the export = contract of the package in the source', () => {
+        const source = fs.readFileSync(path.join(repoRoot, 'src', 'index.ts'), 'utf8');
+
+        expect(source).toMatch(/export = Olx;/);
+        expect(source).not.toMatch(/export default Olx;/);
     });
 
     it('compiles a consumer written for the published package', () => {
