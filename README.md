@@ -162,6 +162,13 @@ try {
 O corpo da resposta também tem os seus campos copiados para o erro, então o código que lia o
 corpo diretamente (`err.message`, `err.errors`, ...) continua funcionando.
 
+O código e a mensagem são lidos tanto na raiz do corpo quanto dentro do objeto `error`, que
+é o formato usado pelos endpoints de autoupload:
+
+```json
+{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"Response code 404 (Not Found)","statusCode":404}}
+```
+
 **Atenção ao `cause`:** ele guarda o erro original do axios, que carrega a requisição
 completa. As credenciais do aplicativo (`client_secret`, token de acesso e o header
 `Authorization`) são **removidas** dele, então ele pode ser registrado com segurança.
