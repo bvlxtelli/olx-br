@@ -37,6 +37,25 @@ describe('OAuth scopes', () => {
         expect(scopeOf('chat   autoservice')).toBe('basic_user_info chat autoservice');
     });
 
+    it('accepts the scopes separated by any whitespace', () => {
+        expect(scopeOf('chat\tautoservice')).toBe('basic_user_info chat autoservice');
+        expect(scopeOf('chat\nautoservice')).toBe('basic_user_info chat autoservice');
+        expect(scopeOf('chat \t autoservice')).toBe('basic_user_info chat autoservice');
+    });
+
+    it('keeps the truthy behaviour of the previous versions for other values', () => {
+        // A caller in JavaScript may pass a value that is neither a boolean, a string nor
+        // an array. Before the scopes were supported, any truthy value requested the
+        // autoupload scope and a falsy one only the basic user info.
+        const scopeOfAny = (request: unknown) =>
+            new URL(olx.getAuthUrl(request as unknown as boolean)).searchParams.get('scope');
+
+        expect(scopeOfAny(1)).toBe('basic_user_info autoupload');
+        expect(scopeOfAny({})).toBe('basic_user_info autoupload');
+        expect(scopeOfAny(0)).toBe('basic_user_info');
+        expect(scopeOfAny(null)).toBe('basic_user_info');
+    });
+
     it('always requests the basic user info scope', () => {
         expect(scopeOf('chat')).toContain('basic_user_info');
         expect(scopeOf(['autoservice'])).toContain('basic_user_info');
