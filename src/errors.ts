@@ -11,9 +11,9 @@
  *  - `body`       : raw response body, exactly as returned by the API.
  *  - `data`       : alias of `body`, kept for convenience.
  *  - `cause`      : the original error thrown by axios, when there is one. It is **not
- *                   enumerable**, so it never reaches `JSON.stringify` nor the console
- *                   (it carries the whole request, with the `client_secret` of the
- *                   application in the case of the token request).
+ *                   enumerable**, so it never reaches `JSON.stringify`, and the credentials
+ *                   of the application are removed from it, so it never reaches the console
+ *                   either (see `sanitizeCause`).
  *
  * Every field of the response body is also copied onto the error instance, so code written
  * against the old behaviour (which received the raw body) keeps working.
@@ -59,6 +59,180 @@ const FORBIDDEN_ERROR_FIELDS = [
 ];
 
 /**
+ * Fields whose value is a credential of the application. The value of these fields is
+ * replaced by `REDACTED` before the error of the transport layer is attached to the
+ * `OlxApiError`.
+ */
+const SENSITIVE_FIELD_PATTERN = /(client_?secret|access_?token|refresh_?token|authorization|password)/i;
+
+/**
+ * Placeholder that replaces the value of a credential.
+ */
+const REDACTED = '[redacted]';
+
+/**
+ * Depth limit of the walk through the error of the transport layer. The error of axios
+ * carries the request, the response and the configuration, and the walk stops there.
+ */
+const MAX_REDACTION_DEPTH = 6;
+
+/**
+ * Replaces the credentials of a string that carries them: a form encoded body
+ * (`client_secret=...`) or a JSON body (`{"access_token":"..."}`).
+ *
+ * @param {string} value String that may carry a credential.
+ * @returns {string} The same string, with the value of the credentials replaced.
+ */
+function redactString(value: string): string {
+    // Form encoded body: `client_secret=SUPER-SECRET&grant_type=authorization_code`.
+    const form = value.replace(
+        /([?&#;]|^)((?:client_?secret|access_?token|refresh_?token|password)=)([^&#;]*)/gi,
+        '$1$2' + REDACTED
+    );
+
+    // JSON body: `{"access_token":"fake-token"}`.
+    return form.replace(
+        /("(?:client_?secret|access_?token|refresh_?token|authorization|password)"\s*:\s*)"(?:[^"\\]|\\.)*"/gi,
+        '$1"' + REDACTED + '"'
+    );
+}
+
+/**
+ * Replaces the credentials of a value, in place. The value is walked as it is, so the
+ * type of every object of the error of the transport layer is preserved.
+ *
+ * @param {unknown} value Value that may carry a credential.
+ * @param {number} depth Current depth of the walk.
+ */
+function redactInPlace(value: unknown, depth = 0): void {
+    if (!value || typeof value !== 'object' || depth > MAX_REDACTION_DEPTH) return;
+
+    const container = value as Record<string, unknown>;
+
+    for (const key of Object.keys(container)) {
+        const current = container[key];
+
+        if (SENSITIVE_FIELD_PATTERN.test(key)) {
+            container[key] = typeof current === 'string' ? REDACTED : current;
+            continue;
+        }
+
+        if (typeof current === 'string') {
+            container[key] = redactString(current);
+            continue;
+        }
+
+        redactInPlace(current, depth + 1);
+    }
+}
+
+/**
+ * Replaces the credentials of the headers of a request. The headers of axios are an
+ * `AxiosHeaders`, whose header names are own properties of the instance.
+ *
+ * @param {unknown} headers Headers of the request.
+ */
+function redactHeaders(headers: unknown): void {
+    if (!headers || typeof headers !== 'object') return;
+
+    const container = headers as Record<string, unknown>;
+
+    for (const key of Object.keys(container)) {
+        if (!SENSITIVE_FIELD_PATTERN.test(key)) continue;
+
+        const value = container[key];
+        if (typeof value !== 'string') continue;
+
+        // `AxiosHeaders` has a `set` that keeps the header name normalized.
+        if (typeof (container as { set?: unknown }).set === 'function') {
+            (container as unknown as { set: (name: string, value: string) => void }).set(
+                key,
+                REDACTED
+            );
+            continue;
+        }
+
+        container[key] = REDACTED;
+    }
+}
+
+/**
+ * Removes the credentials of the application from the configuration of a request.
+ *
+ * The configuration of axios carries the body that was sent (`config.data`, the form
+ * with the `client_secret` in the case of the token request) and the headers of the
+ * request (the `Authorization` header of the chat).
+ *
+ * @param {unknown} config Configuration of the request.
+ */
+function sanitizeConfig(config: unknown): void {
+    if (!config || typeof config !== 'object') return;
+
+    const fields = config as {
+        data?: unknown;
+        headers?: unknown;
+        params?: unknown;
+        auth?: unknown;
+        url?: unknown;
+    };
+
+    if (typeof fields.data === 'string') fields.data = redactString(fields.data);
+    else redactInPlace(fields.data);
+
+    redactHeaders(fields.headers);
+
+    if (fields.params) {
+        if (typeof fields.params === 'string') fields.params = redactString(fields.params);
+        else redactInPlace(fields.params);
+    }
+
+    if (fields.auth) redactInPlace(fields.auth);
+
+    if (typeof fields.url === 'string') fields.url = redactString(fields.url);
+}
+
+/**
+ * Removes the credentials of the application from the error thrown by the transport
+ * layer, so that the error can be logged without leaking the `client_secret` nor the
+ * access token of the user.
+ *
+ * The error of axios carries the whole request: `config.data` is the body that was sent
+ * (the form with the `client_secret` in the case of the token request) and `request` is
+ * the `ClientRequest`, with the socket and the agent. The `response` of axios carries
+ * the same `config` again, so it is cleaned too.
+ *
+ * The `cause` is the escape hatch for the consumers that need the error of axios
+ * (`isAxiosError`, the configuration, the stack), so the error is kept — only the
+ * credentials are removed from it.
+ *
+ * @param {unknown} cause Error thrown by the transport layer.
+ * @returns {unknown} The same error, without the credentials of the application.
+ */
+function sanitizeCause(cause: unknown): unknown {
+    if (!cause || typeof cause !== 'object') return cause;
+
+    const error = cause as {
+        isAxiosError?: boolean;
+        config?: unknown;
+        request?: unknown;
+        response?: { config?: unknown; request?: unknown };
+    };
+
+    sanitizeConfig(error.config);
+    if (error.response) sanitizeConfig(error.response.config);
+
+    // The `ClientRequest` carries the socket, the agent and the body of the request: it
+    // is noise in a log, and it is a second copy of the body of the request. It is only
+    // removed from the errors of axios, so that an error of the caller is never touched.
+    if (error.isAxiosError === true) {
+        delete error.request;
+        if (error.response) delete error.response.request;
+    }
+
+    return cause;
+}
+
+/**
  * Error thrown by the `Olx` class when the OLX API answers with an error.
  */
 export class OlxApiError extends Error {
@@ -88,9 +262,15 @@ export class OlxApiError extends Error {
         // The `cause` holds the error thrown by axios, which carries the whole request
         // (and, for the token request, the `client_secret` of the application). It is
         // defined as non enumerable, exactly like the `cause` of the standard `Error`, so
-        // that it never reaches `JSON.stringify` nor the console.
+        // that it never reaches `JSON.stringify`.
+        //
+        // The console is a second vector: `console.error(error)` prints the chain of the
+        // `cause` of an error, even when the `cause` is not enumerable. The credentials
+        // are therefore removed from the error of the transport layer before it is
+        // attached, so that `console.error(error)` cannot print the `client_secret` of
+        // the application nor the access token of the user.
         Object.defineProperty(this, 'cause', {
-            value: init.cause,
+            value: sanitizeCause(init.cause),
             enumerable: false,
             writable: false,
             configurable: true

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { inspect } from 'util';
 import Olx from '../../src/index';
 import { authApi, appApi } from '../../src/services/api';
 import { failingAdapter, mockAdapter } from '../helpers/axios-mock';
@@ -203,6 +204,65 @@ describe('error handling', () => {
         expect(error.cause).toBeDefined();
         expect(Object.keys(error)).not.toContain('cause');
         expect(JSON.stringify(error)).not.toContain('SUPER-SECRET-VALUE');
+    });
+
+    describe('the credentials never reach the console', () => {
+        // `console.error(error)` prints the chain of the `cause` of an error, even when
+        // the `cause` is not enumerable: Node prints it as `[cause]`. The credentials are
+        // therefore removed from the error of the transport layer itself.
+        it('does not print the client_secret of the token request', async () => {
+            const mock = mockAdapter({
+                status: 400,
+                statusText: 'Bad Request',
+                data: { error: 'invalid_client' }
+            });
+            authApi.defaults.adapter = mock.adapter;
+
+            const olx = new Olx('client-id', 'SUPER-SECRET-VALUE', 'https://example.com/callback');
+            const error = await olx.getToken('fake-code').catch((err) => err);
+
+            const printed = inspect(error, { depth: null });
+
+            expect(printed).not.toContain('SUPER-SECRET-VALUE');
+            expect(printed).toContain('[redacted]');
+
+            // The request itself is not affected: the secret was sent, and it is the
+            // error that is cleaned.
+            expect(String(mock.requests[0].rawBody)).toContain('client_secret=SUPER-SECRET-VALUE');
+        });
+
+        it('does not print the access token of the request', async () => {
+            appApi.defaults.adapter = mockAdapter({
+                status: 401,
+                statusText: 'Unauthorized',
+                data: { message: 'Unauthorized' }
+            }).adapter;
+
+            const error = await Olx.getAnuncios('SUPER-SECRET-TOKEN').catch((err) => err);
+
+            const printed = inspect(error, { depth: null });
+
+            expect(printed).not.toContain('SUPER-SECRET-TOKEN');
+            expect(printed).toContain('[redacted]');
+        });
+
+        it('keeps the error of axios available as the cause', async () => {
+            authApi.defaults.adapter = mockAdapter({
+                status: 400,
+                statusText: 'Bad Request',
+                data: { error: 'invalid_client' }
+            }).adapter;
+
+            const olx = new Olx('client-id', 'SUPER-SECRET-VALUE', 'https://example.com/callback');
+            const error = await olx.getToken('fake-code').catch((err) => err);
+
+            const cause = error.cause as { isAxiosError?: boolean; config?: { data?: string } };
+
+            expect(cause).toBeDefined();
+            expect(cause.isAxiosError).toBe(true);
+            expect(cause.config && cause.config.data).toContain('client_secret');
+            expect(cause.config && cause.config.data).not.toContain('SUPER-SECRET-VALUE');
+        });
     });
 
     it('rejects when the token request answers 200 without a token', async () => {
