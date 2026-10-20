@@ -78,7 +78,7 @@ usa o token de acesso como *bearer token* e exige o escopo `chat`.
 | Método | Requisição | Resposta |
 |---|---|---|
 | `Olx.ativarWebhookChat(access_token, webhook)` | `POST /autoservice/v1/chat` com `{"webhook": "url"}` | `201` na primeira ativação, `200` em atualizações, `401` com token inválido |
-| `Olx.desativarWebhookChat(access_token)` | `DELETE /autoservice/v1/chat` | `200` ao desativar, `400` quando a conta não existe |
+| `Olx.desativarWebhookChat(access_token)` | `DELETE /autoservice/v1/chat` | `200` ao desativar, `401` com token inválido, `400` quando a conta não existe |
 | `Olx.responderChat(access_token, mensagem)` | `POST /autoservice/v1/chat/send` com `{"textMessage", "messageId", "chatId"}` | `200` ao enviar, `400` com corpo inválido ou sem integração, `500` em erro interno |
 
 ```javascript
@@ -144,11 +144,16 @@ O código compilado (`dist/`) continua mirando em ES5, mas a dependência `axios
 ## Desenvolvimento
 
 ```bash
-npm ci             # instala as dependências
-npm run typecheck  # verifica os tipos do código e dos testes
-npm run build      # compila em dist/
-npm test           # roda a suíte de testes
+npm ci              # instala as dependências
+npm run build       # compila o pacote em dist/
+npm run typecheck   # verifica os tipos do código e dos testes
+npm test            # roda a suíte de testes unitários
+npm run test:integration  # roda os testes contra a API da OLX (precisa de internet)
+npm run test:coverage     # roda a suíte e gera o relatório de cobertura
 ```
+
+Os testes de integração são ignorados por padrão e usam credenciais falsas: eles verificam
+o status HTTP e o corpo da resposta da API real, sem precisar de nenhuma credencial.
 
 ## Contato
 

@@ -12,6 +12,8 @@
         "build": "tsc",
         "test": "vitest run",
         "test:watch": "vitest",
+        "test:integration": "vitest run --config vitest.integration.config.mts",
+        "test:coverage": "vitest run --coverage",
         "typecheck": "tsc --noEmit -p tsconfig.test.json",
         "prepublishOnly": "npm run build"
     },
@@ -23,6 +25,7 @@
     },
     "devDependencies": {
         "@types/node": "^22.15.0",
+        "@vitest/coverage-v8": "^4.1.12",
         "typescript": "^5.9.3",
         "vitest": "^4.1.12"
     },
