@@ -24,7 +24,7 @@ describe('error consistency', () => {
         chatApi.defaults.adapter = originalChatAdapter;
     });
 
-    const methods = () => [
+    const methods = (): [string, () => Promise<any>][] => [
         ['getAnuncios', () => Olx.getAnuncios('fake-token')],
         ['getBasicUserInfo', () => Olx.getBasicUserInfo('fake-token')],
         ['putAnuncios', () => Olx.putAnuncios('fake-token', [])],
