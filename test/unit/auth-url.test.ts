@@ -84,7 +84,7 @@ describe('getAuthUrl', () => {
         expect(params.has('state')).toBe(false);
     });
 
-<    it('encodes the client id', () => {
+   it('encodes the client id', () => {
         const olxWithSpecialId = new Olx('client id&other', 'client-secret', 'https://example.com/cb');
 
         const url = olxWithSpecialId.getAuthUrl();

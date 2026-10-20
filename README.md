@@ -137,7 +137,6 @@ try {
 }
 ```
 
-<<<<<<< HEAD
 O código e a mensagem são lidos tanto na raiz do corpo quanto dentro do objeto `error`, que
 é o formato usado pelos endpoints de autoupload:
 
@@ -145,13 +144,6 @@ O código e a mensagem são lidos tanto na raiz do corpo quanto dentro do objeto
 {"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"Response code 404 (Not Found)","statusCode":404}}
 ```
 
-## Ambientes suportados
-
-O código compilado (`dist/`) continua mirando em ES5, mas a dependência `axios@1.x` é distribuída com sintaxe moderna (`arrow functions`, `class`, `const` e `async`) e deixou de suportar o Internet Explorer. Portanto o pacote exige um runtime moderno:
-
-- **Node.js**: 18 ou superior. O CI roda em Node 20, 22 e 24.
-- **Navegadores**: qualquer navegador com suporte a ES2017 ou superior (Chrome, Edge, Firefox e Safari atuais). O Internet Explorer não é suportado.
-=======
 ### Erro de aplicação e erro HTTP
 
 A API da OLX reporta o erro de duas maneiras diferentes:
@@ -172,24 +164,84 @@ A API da OLX reporta o erro de duas maneiras diferentes:
 
 ### Formatos de erro da API
 
-Cada endpoint nomeia o erro de um jeito, e a API devolve **7 formatos diferentes** de resposta
+Cada endpoint nomeia o erro de um jeito, e a API devolve **9 formatos diferentes** de resposta
 de erro. Todos são preservados em `err.body`, e os campos do corpo também são copiados para o
 erro — assim é possível ler `err.message`, `err.reason`, `err.errors` etc. direto na exceção:
 
-| endpoint | status | corpo |
-|---|---|---|
-| `/autoservice/v1/chat` (sem token no header) | `400` | `{"message":"Bad request: accessToken is required"}` |
-| `/autoservice/v1/chat` (token inválido) | `401` | `{"message":"Unauthorized"}` |
-| `/autoservice/v1/lead` | `401` | `{"reason":"ACCESS_DENIED","message":"Check the client authentication token."}` |
-| `/autoupload/import` (sem permissão) | `200` | `{"token":null,"statusCode":-6,"statusMessage":"Without permission","errors":[]}` |
-| `/autoupload/published` | `404` | `{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"...","statusCode":404}}` |
-| `/oauth_api/basic_user_info` | `400` | corpo vazio |
-| `auth.olx.com.br/oauth/token` | `400` | `{"error":"invalid_client"}` |
+| # | formato | exemplo | status | `code` | `message` |
+|---|---|---|---|---|---|
+| 1 | grupo `autoupload`, aninhado | `{"status":"ERROR","error":{"reason":"ACCESS_TOKEN_NOT_FOUND","message":"Response code 404 (Not Found)","statusCode":404}}` | `404` | `ACCESS_TOKEN_NOT_FOUND` | `Response code 404 (Not Found)` |
+| 2 | grupo `autoservice` | `{"message":"Unauthorized"}` | `401` | — | `Unauthorized` |
+| 3 | grupo `autoservice`, com o token no lugar errado | `{"message":"Bad request: accessToken is required"}` | `400` | — | `Bad request: accessToken is required` |
+| 4 | host de autorização, OAuth | `{"error":"invalid_client"}` | `400` | `invalid_client` | `invalid_client` |
+| 5 | host de autorização, OAuth com descrição | `{"error":"invalid_grant","error_description":"..."}` | `400` | `invalid_grant` | a descrição |
+| 6 | corpo que é um **array** | `[{"property":"access_token","message":"is missing and it is required"}]` | `400` | — | `Request failed with status code 400` |
+| 7 | corpo que é um **texto** | `"Cannot POST /autoupload/import"` | `404` | — | `Request failed with status code 404` |
+| 8 | o campo com o nome escrito errado | `{"mesage":"404 NOT_FOUND ..."}` | `500` | — | `404 NOT_FOUND ...` |
+| 9 | corpo **vazio** | `""` | `400` | — | `Request failed with status code 400` |
 
-> **Pendente de decisão (Hex):** o alias final do corpo do erro (hoje `body` e `data`), a
-> versão do pacote (`2.0.0` ou `1.0.6`) e a seção de migração ainda não foram definidos.
-> Esta parte do README será completada quando o contrato for fechado.
->>>>>>> 31a8404 (test: cover where the chat token may be sent and document the error formats)
+O erro de aplicação (o `200` com `statusCode` negativo, como o `-6` "Without permission" do
+`/autoupload/import`) não está na lista: ele não é um erro HTTP, a promise resolve e quem
+chama tem que ler o `statusCode`.
+
+### O objeto de erro
+
+Todas as requisições que falham rejeitam com um `OlxApiError`, que é um `Error` e carrega:
+
+| campo | o que é |
+|-------|---------|
+| `status` | o status HTTP devolvido pela API (401, 400, 500, ...) |
+| `statusText` | o texto do status HTTP devolvido pela API |
+| `code` | o código do erro informado pela API (`code`, `reason` ou `statusCode`, inclusive quando estão dentro de um objeto `error`) |
+| `body` | o corpo da resposta, exatamente como a API devolveu (também disponível como `data`) |
+| `data` | alias de `body` |
+| `cause` | o erro original lançado pelo axios, quando existe |
+| `message` | a mensagem informada pela API |
+
+O `response` do axios **não** é exposto: ele carrega o `config`, e o `config.data` é o corpo
+da requisição — no `getToken` esse corpo é o formulário com o `client_secret` do aplicativo.
+
+**Atenção ao `cause`:** ele guarda o erro original do axios, que carrega a requisição
+completa. Não registre o erro inteiro no log (`console.error(err)`) nem o transforme em JSON
+(`JSON.stringify(err)`) em uma aplicação que tem segredos: o `client_secret` do aplicativo
+aparece no `cause`. Registre `err.status`, `err.code`, `err.body` e `err.message`.
+
+### Migrando da versão 1.x para a 2.x
+
+A versão 2.x muda **o valor que rejeita a promise**. Na 1.x a rejeitava com o corpo bruto da
+resposta (e, quando o corpo vinha vazio, com o erro do axios). Na 2.x a rejeita sempre com um
+`OlxApiError`.
+
+```javascript
+// 1.x
+try {
+  await Olx.getAnuncios(access_token);
+} catch (e) {
+  console.log(e.message);         // o corpo bruto
+  console.log(e.response.status); // só funcionava quando o corpo vinha vazio
+}
+
+// 2.x
+try {
+  await Olx.getAnuncios(access_token);
+} catch (e) {
+  console.log(e.status);          // o status HTTP
+  console.log(e.code);            // o código do erro
+  console.log(e.body);            // o corpo bruto da resposta
+}
+```
+
+O que **continua** funcionando: `err.message` e os campos do corpo (`err.errors`, ...).
+O que **muda**: `err` passou a ser um `Error` (`err instanceof Error` era `false` e passa a
+ser `true`), `err.response` e `err.isAxiosError` não existem mais (use `err.cause`), e
+`Object.keys(err)` e `JSON.stringify(err)` devolvem o erro e não o corpo.
+
+## Ambientes suportados
+
+O código compilado (`dist/`) continua mirando em ES5, mas a dependência `axios@1.x` é distribuída com sintaxe moderna (`arrow functions`, `class`, `const` e `async`) e deixou de suportar o Internet Explorer. Portanto o pacote exige um runtime moderno:
+
+- **Node.js**: 18 ou superior. O CI roda em Node 20, 22 e 24.
+- **Navegadores**: qualquer navegador com suporte a ES2017 ou superior (Chrome, Edge, Firefox e Safari atuais). O Internet Explorer não é suportado.
 
 ## Desenvolvimento
 
@@ -203,12 +255,7 @@ npm run test:coverage     # roda a suíte e gera o relatório de cobertura
 ```
 
 Os testes de integração são ignorados por padrão e usam credenciais falsas: eles verificam
-o status HTTP e o corpo da resposta da API real, sem precisar de nenhuma credencial. Para
-habilitá-los, use a variável de ambiente `OLX_LIVE=1`:
-
-```bash
-OLX_LIVE=1 npm run test:integration
-```
+o status HTTP e o corpo da resposta da API real, sem precisar de nenhuma credencial.
 
 ## Contato
 
