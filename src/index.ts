@@ -4,8 +4,9 @@
  * MIT Licensed
  */
 
-import { authApi, appApi } from './services/api';
+import { authApi, appApi, baseUrlOf, AUTH_BASE_URL } from './services/api';
 import { UserInfo, ModelosResponse } from './types';
+import { OlxApiError, toOlxApiError } from './errors';
 
 class Olx {
     client_id: string;
@@ -13,14 +14,20 @@ class Olx {
     redirect_uri: string;
 
     /**
+     * Error thrown when a request to the OLX API fails. It keeps the HTTP status, the error
+     * code and the response body of the failed request.
+     */
+    static readonly OlxApiError = OlxApiError;
+
+    /**
      * @constructor
      *
      * @param {string} client_id
-     *   A identificação do cliente que foi fornecida pelo olx.com.br através do registro da aplicação.
+     *   A identificação do cliente que foi fornecida pelo olx.com.br através do registro da aplicação.
      * @param {string} client_secret
      *   Chave de segurança fornecida pela OLX após o registro da aplicação.
      * @param {string} redirect_uri
-     *   Endpoint do cliente que será alvo de redirecionamento no processo de autenticação. Deve ter sido fornecida no registro da aplicação.
+     *   Endpoint do cliente que será alvo de redirecionamento no processo de autenticação. Deve ter sido fornecida no registro da aplicação.
      */
     constructor(client_id: string, client_secret: string, redirect_uri: string) {
         this.client_id = client_id
@@ -30,22 +37,32 @@ class Olx {
 
     /**
      * Obtém a URL de autenticação da OLX, onde será solicitada a autorização do usuário.
-     * @param {boolean} [autoupload=true] Requerir acesso ao sistema de autouploads (Envio de anúncios de forma automática). Caso falso, terá apenas acesso aos dados básicos do usuário.
-     * @param {string} state Fornece qualquer valor que pode ser útil a aplicação ao receber a resposta de requisição.
+     *
+     * O `client_id` e o `state` são enviados codificados, e o `redirect_uri` é enviado
+     * exatamente como foi registrado, porque o servidor de autorização o compara com o
+     * valor registrado. Por isso, o `redirect_uri` não pode conter `&`, `#`, `?` nem
+     * espaços.
+     *
+     * @param {boolean} [autoupload=true] Requerir acesso ao sistema de autouploads (Envio de anúncios de forma automática). Caso falso, terá apenas acesso aos dados básicos do usuário.
+     * @param {string} state Fornece qualquer valor que pode ser útil a aplicação ao receber a resposta de requisição.
      * @returns {string} URL a ser usada para obter a autorização da OLX. 
      */
     getAuthUrl(autoupload: boolean = true, state?: string): string {
-        let scope = 'basic_user_info';
-        if (autoupload) scope += '%20autoupload';
-        let query = `response_type=code&client_id=${this.client_id}&redirect_uri=${this.redirect_uri}&scope=${scope}`;
-        if (state) query += `&state=${state}`;
-        return authApi.defaults.baseURL + '/oauth?' + query;
+        const scopes = autoupload ? ['basic_user_info', 'autoupload'] : ['basic_user_info'];
+
+        let query = `response_type=code`;
+        query += `&client_id=${encodeURIComponent(this.client_id)}`;
+        query += `&redirect_uri=${this.redirect_uri}`;
+        query += `&scope=${scopes.join('%20')}`;
+        if (state) query += `&state=${encodeURIComponent(state)}`;
+
+        return `${baseUrlOf(authApi, AUTH_BASE_URL)}/oauth?${query}`;
     }
 
     /**
      * Gera um token de acesso a partir do código gerado pelo serviço de autenticação.
-     * @param {string} code Código de autorização gerado pelo servidor de autenticação.
-     * @returns {Promise<string>} Chave de acesso retornada pelo servidor de autenticação. 
+     * @param {string} code Código de autorização gerado pelo servidor de autenticação.
+     * @returns {Promise<string>} Chave de acesso retornada pelo servidor de autenticação. 
      */
     async getToken(code: string): Promise<string> {
         const params = new URLSearchParams();
@@ -54,15 +71,25 @@ class Olx {
         params.append('client_secret', this.client_secret);
         params.append('redirect_uri', this.redirect_uri);
         params.append('grant_type', "authorization_code");
-        return new Promise<string>((resolve, reject) => {
-            authApi.post("/oauth/token", params)
-                .then((result) => {
-                    resolve(result.data.access_token);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+
+        let result;
+        try {
+            result = await authApi.post("/oauth/token", params);
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+
+        // A leitura da resposta fica fora do `try`, para que um erro de programação não
+        // seja disfarçado de erro da API. Uma resposta `200` sem o token é uma falha.
+        const token = result.data && result.data.access_token;
+        if (!token) {
+            throw new OlxApiError('The OLX authorization server did not return an access token.', {
+                status: result.status,
+                statusText: result.statusText,
+                body: result.data
+            });
+        }
+        return token;
     }
 
     /**
@@ -71,32 +98,28 @@ class Olx {
      * @returns {Promise<Object[]>} Lista de anuncios ativos
      */
     static async getAnuncios(access_token: string): Promise<any[]> {
-        return new Promise<any[]>((resolve, reject) => {
-            appApi.post("/autoupload/published", { access_token })
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.post("/autoupload/published", { access_token });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
      * Obtém os dados básicos do usuário (nome e email)
-     * @param access_token Chave de acesso do usuário
+     * @param {access_token Chave de acesso do usuário
      * @returns {Promise<UserInfo>} Retorna os dados do usuário
      */
     static async getBasicUserInfo(access_token: string): Promise<UserInfo> {
-        return new Promise<UserInfo>((resolve, reject) => {
-            appApi.post("/oauth_api/basic_user_info", { access_token })
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.post("/oauth_api/basic_user_info", { access_token });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
@@ -107,15 +130,13 @@ class Olx {
      */
     static async putAnuncios(access_token: string, anuncios: Object[]): Promise<any> {
         var data = { access_token, "ad_list": anuncios };
-        return new Promise<any>((resolve, reject) => {
-            appApi.put("/autoupload/import", data)
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.put("/autoupload/import", data);
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
@@ -133,15 +154,13 @@ class Olx {
             });
         });
         var data = { access_token, "ad_list": anuncios };
-        return new Promise<any>((resolve, reject) => {
-            appApi.put("/autoupload/import", data)
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.put("/autoupload/import", data);
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
@@ -151,15 +170,13 @@ class Olx {
      * @returns {Promise<any>} Retorno da requisição
      */
     static async getStatusAnuncio(access_token: string, token_anuncio: string): Promise<any> {
-        return new Promise<any>((resolve, reject) => {
-            appApi.post(`/autoupload/import/${token_anuncio}`, { access_token })
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.post(`/autoupload/import/${token_anuncio}`, { access_token });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
@@ -175,15 +192,13 @@ class Olx {
             uri += `/${id_marca}`;
             if (id_modelo) uri += `/${id_modelo}`;
         }
-        return new Promise<ModelosResponse>((resolve, reject) => {
-            appApi.post(uri, { access_token })
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.post(uri, { access_token });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
@@ -199,15 +214,13 @@ class Olx {
             uri += `/${id_marca}`;
             if (id_modelo) uri += `/${id_modelo}`;
         }
-        return new Promise<ModelosResponse>((resolve, reject) => {
-            appApi.post(uri, { access_token })
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.post(uri, { access_token });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
 
     /**
@@ -216,16 +229,24 @@ class Olx {
      * @returns {Promise<ModelosResponse>} Retorno da requisição
      */
     static async getCilindradas(access_token: string): Promise<ModelosResponse> {
-        return new Promise<ModelosResponse>((resolve, reject) => {
-            appApi.post('/autoupload/moto_cubiccms_info', { access_token })
-                .then((result) => {
-                    resolve(result.data);
-                })
-                .catch((err) => {
-                    reject(err.response?.data || err);
-                })
-        });
+        let result;
+        try {
+            result = await appApi.post('/autoupload/moto_cubiccms_info', { access_token });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+        return result.data;
     }
+}
+
+/**
+ * Public helper types, exposed through the exported class so that the `export =` contract
+ * of the package (`const Olx = require('olx-br')`) is preserved.
+ */
+namespace Olx {
+    export type UserInfo = import('./types').UserInfo;
+    export type ModelosResponse = import('./types').ModelosResponse;
+    export type OlxApiError = import('./errors').OlxApiError;
 }
 
 export = Olx;

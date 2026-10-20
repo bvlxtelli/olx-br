@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "es2019",
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "lib": ["ES2020", "DOM"],
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "types": ["node"],
+        "baseUrl": ".",
+        "paths": {
+            "olx-br": ["../../dist/index.d.ts"]
+        }
+    },
+    "files": [
+        "consumer-1.0.6.ts",
+        "consumer-require.ts",
+        "consumer-default.ts"
+    ]
+}

@@ -1,14 +1,35 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
-const GET_TOKEN_URL = 'https://auth.olx.com.br/';
-const API_URL = 'https://apps.olx.com.br/';
+/**
+ * Base URL of the OLX authentication service.
+ *
+ * It is kept without a trailing slash so that the paths appended to it never produce a
+ * double slash (the previous implementation produced `https://auth.olx.com.br//oauth`).
+ */
+export const AUTH_BASE_URL = 'https://auth.olx.com.br';
+
+/** Base URL of the OLX application API (`autoupload`, `oauth_api` and `autoservice`). */
+export const APP_BASE_URL = 'https://apps.olx.com.br';
 
 export const authApi = axios.create({
-  baseURL: GET_TOKEN_URL,
+  baseURL: AUTH_BASE_URL,
   headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 });
 
 export const appApi = axios.create({
-    baseURL: API_URL,
+    baseURL: APP_BASE_URL,
     headers: { 'Content-Type': 'application/json' }
 });
+
+/**
+ * Returns the base URL of an axios instance without trailing slashes, so that a path can
+ * be safely appended to it.
+ *
+ * @param {AxiosInstance} instance Axios instance used to perform the request.
+ * @param {string} fallback Base URL used when the instance has none configured.
+ * @returns {string} Base URL without trailing slashes.
+ */
+export function baseUrlOf(instance: AxiosInstance, fallback: string): string {
+    const base = instance.defaults.baseURL || fallback;
+    return base.replace(/\/+$/, '');
+}

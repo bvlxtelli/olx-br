@@ -1,0 +1,706 @@
+{
+    "version": 1,
+    "measuredAt": "2026-10-20",
+    "description": "Contract matrix of every public method of the olx-br package. Each row states the HTTP verb, the URL, the authentication style and the body the method must send. The live section states the answer of the OLX API for the same calls, measured with dummy credentials.",
+    "hosts": {
+        "auth": "https://auth.olx.com.br",
+        "app": "https://apps.olx.com.br"
+    },
+    "methods": [
+        {
+            "id": "M00",
+            "name": "getAuthUrl",
+            "kind": "instance",
+            "noHttp": true,
+            "args": [],
+            "expectUrl": {
+                "prefix": "https://auth.olx.com.br/oauth?",
+                "noDoubleSlash": true,
+                "params": {
+                    "response_type": "code",
+                    "client_id": "client-id",
+                    "redirect_uri": "https://example.com/callback",
+                    "scope": "basic_user_info autoupload"
+                }
+            }
+        },
+        {
+            "id": "M00b",
+            "name": "getAuthUrl",
+            "kind": "instance",
+            "noHttp": true,
+            "args": [
+                false
+            ],
+            "expectUrl": {
+                "prefix": "https://auth.olx.com.br/oauth?",
+                "noDoubleSlash": true,
+                "params": {
+                    "response_type": "code",
+                    "client_id": "client-id",
+                    "redirect_uri": "https://example.com/callback",
+                    "scope": "basic_user_info"
+                }
+            }
+        },
+        {
+            "id": "M00c",
+            "name": "getAuthUrl",
+            "kind": "instance",
+            "noHttp": true,
+            "args": [
+                [
+                    "chat",
+                    "autoservice"
+                ]
+            ],
+            "expectUrl": {
+                "prefix": "https://auth.olx.com.br/oauth?",
+                "noDoubleSlash": true,
+                "params": {
+                    "response_type": "code",
+                    "client_id": "client-id",
+                    "redirect_uri": "https://example.com/callback",
+                    "scope": "basic_user_info chat autoservice"
+                }
+            }
+        },
+        {
+            "id": "M01",
+            "name": "getToken",
+            "kind": "instance",
+            "verb": "post",
+            "url": "https://auth.olx.com.br/oauth/token",
+            "auth": "form",
+            "contentType": "application/x-www-form-urlencoded",
+            "args": [
+                "fake-code"
+            ],
+            "expectBody": {
+                "form": {
+                    "code": "fake-code",
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "redirect_uri": "https://example.com/callback",
+                    "grant_type": "authorization_code"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M02",
+            "name": "getAnuncios",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/published",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token"
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M03",
+            "name": "getBasicUserInfo",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/oauth_api/basic_user_info",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token"
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M04",
+            "name": "putAnuncios",
+            "kind": "static",
+            "verb": "put",
+            "url": "https://apps.olx.com.br/autoupload/import",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                [
+                    {
+                        "subject": "A very nice part"
+                    }
+                ]
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token",
+                    "ad_list": [
+                        {
+                            "subject": "A very nice part"
+                        }
+                    ]
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M05",
+            "name": "deleteAnuncios",
+            "kind": "static",
+            "verb": "put",
+            "url": "https://apps.olx.com.br/autoupload/import",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                [
+                    "ad-1",
+                    "ad-2"
+                ]
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token",
+                    "ad_list": [
+                        {
+                            "id": "ad-1",
+                            "operation": "delete"
+                        },
+                        {
+                            "id": "ad-2",
+                            "operation": "delete"
+                        }
+                    ]
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M06",
+            "name": "getStatusAnuncio",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/import/ad-token",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                "ad-token"
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M07",
+            "name": "getModelosCarros",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/car_info",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token"
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M08",
+            "name": "getModelosCarros",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/car_info/1",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                1
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M09",
+            "name": "getModelosCarros",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/car_info/1/2",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                1,
+                2
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M10",
+            "name": "getModelosMotos",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/moto_info",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token"
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M11",
+            "name": "getModelosMotos",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/moto_info/1",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                1
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M12",
+            "name": "getCilindradas",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoupload/moto_cubiccms_info",
+            "auth": "body",
+            "contentType": "application/json",
+            "args": [
+                "fake-token"
+            ],
+            "expectBody": {
+                "json": {
+                    "access_token": "fake-token"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": null
+            }
+        },
+        {
+            "id": "M13",
+            "name": "ativarWebhookChat",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoservice/v1/chat",
+            "auth": "bearer",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                "https://example.com/hook"
+            ],
+            "expectBody": {
+                "json": {
+                    "webhook": "https://example.com/hook"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": "Bearer fake-token"
+            }
+        },
+        {
+            "id": "M14",
+            "name": "desativarWebhookChat",
+            "kind": "static",
+            "verb": "delete",
+            "url": "https://apps.olx.com.br/autoservice/v1/chat",
+            "auth": "bearer",
+            "contentType": "application/json",
+            "args": [
+                "fake-token"
+            ],
+            "expectBody": {
+                "json": null
+            },
+            "expectHeaders": {
+                "Authorization": "Bearer fake-token"
+            }
+        },
+        {
+            "id": "M15",
+            "name": "responderChat",
+            "kind": "static",
+            "verb": "post",
+            "url": "https://apps.olx.com.br/autoservice/v1/chat/send",
+            "auth": "bearer",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                {
+                    "textMessage": "Hello",
+                    "messageId": "message-id",
+                    "chatId": "chat-id"
+                }
+            ],
+            "expectBody": {
+                "json": {
+                    "textMessage": "Hello",
+                    "messageId": "message-id",
+                    "chatId": "chat-id"
+                }
+            },
+            "expectHeaders": {
+                "Authorization": "Bearer fake-token"
+            }
+        }
+    ],
+    "live": [
+        {
+            "id": "L01",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/autoservice/v1/chat",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                },
+                "json": {
+                    "webhook": "https://example.com/hook"
+                }
+            },
+            "expectStatus": 401,
+            "expectBody": {
+                "message": "Unauthorized"
+            },
+            "stable": true,
+            "note": "The autoservice group only accepts the token in the Authorization header.",
+            "method": "M13",
+            "outcome": "reject"
+        },
+        {
+            "id": "L02",
+            "request": {
+                "method": "DELETE",
+                "url": "https://apps.olx.com.br/autoservice/v1/chat",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                }
+            },
+            "expectStatus": 401,
+            "expectBody": {
+                "message": "Unauthorized"
+            },
+            "stable": true,
+            "method": "M14",
+            "outcome": "reject"
+        },
+        {
+            "id": "L03",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/autoservice/v1/chat/send",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                },
+                "json": {
+                    "textMessage": "Hello",
+                    "messageId": "m",
+                    "chatId": "c"
+                }
+            },
+            "expectStatus": 401,
+            "expectBody": {
+                "message": "Unauthorized"
+            },
+            "stable": true,
+            "method": "M15",
+            "outcome": "reject"
+        },
+        {
+            "id": "L04",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/autoservice/v1/chat",
+                "json": {
+                    "webhook": "https://example.com/hook"
+                }
+            },
+            "expectStatus": 400,
+            "expectBody": {
+                "message": "Bad request: accessToken is required"
+            },
+            "stable": true,
+            "note": "The autoservice group uses the camelCase name accessToken, not access_token.",
+            "method": "M13",
+            "outcome": "reject"
+        },
+        {
+            "id": "L05",
+            "request": {
+                "method": "PUT",
+                "url": "https://apps.olx.com.br/autoupload/import",
+                "json": {
+                    "access_token": "fake-access-token",
+                    "ad_list": [
+                        {
+                            "subject": "x",
+                            "body": "y",
+                            "price": 1
+                        }
+                    ]
+                }
+            },
+            "expectStatus": 200,
+            "expectBody": {
+                "token": null,
+                "statusCode": -6,
+                "statusMessage": "Without permission",
+                "errors": []
+            },
+            "stable": true,
+            "note": "The application error resolves with HTTP 200. The caller has to read statusCode.",
+            "method": "M04",
+            "outcome": "resolve"
+        },
+        {
+            "id": "L06",
+            "request": {
+                "method": "PUT",
+                "url": "https://apps.olx.com.br/autoupload/import",
+                "json": {
+                    "access_token": "fake-access-token",
+                    "ad_list": []
+                }
+            },
+            "expectStatus": 200,
+            "expectBody": {
+                "token": null,
+                "statusCode": -3,
+                "statusMessage": "There is no ad to import",
+                "errors": []
+            },
+            "stable": true,
+            "method": "M04",
+            "outcome": "resolve"
+        },
+        {
+            "id": "L07",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/autoupload/import",
+                "json": {
+                    "access_token": "fake-access-token",
+                    "ad_list": []
+                }
+            },
+            "expectStatus": 404,
+            "expectBodyContains": "Cannot POST /autoupload/import",
+            "stable": true,
+            "note": "The import endpoint is a PUT. The wrong verb answers HTML, not JSON.",
+            "method": "M04",
+            "outcome": "reject"
+        },
+        {
+            "id": "L08",
+            "request": {
+                "method": "POST",
+                "url": "https://auth.olx.com.br/oauth/token",
+                "form": {
+                    "code": "fake-code",
+                    "client_id": "fake-client-id",
+                    "client_secret": "fake-client-secret",
+                    "redirect_uri": "https://example.com/callback",
+                    "grant_type": "authorization_code"
+                }
+            },
+            "expectStatus": 400,
+            "expectBody": {
+                "error": "invalid_client"
+            },
+            "stable": true,
+            "method": "M01",
+            "outcome": "reject"
+        },
+        {
+            "id": "L09",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/autoupload/published",
+                "json": {
+                    "access_token": "fake-access-token"
+                }
+            },
+            "expectStatus": 404,
+            "expectBody": {
+                "status": "ERROR",
+                "error": {
+                    "reason": "ACCESS_TOKEN_NOT_FOUND",
+                    "message": "Response code 404 (Not Found)",
+                    "statusCode": 404
+                }
+            },
+            "stable": true,
+            "method": "M02",
+            "outcome": "reject"
+        },
+        {
+            "id": "L10",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/oauth_api/basic_user_info",
+                "json": {
+                    "access_token": "fake-access-token"
+                }
+            },
+            "expectStatus": 400,
+            "expectBody": "",
+            "stable": true,
+            "note": "The body of this answer is empty. The library has to keep the status anyway.",
+            "method": "M03",
+            "outcome": "reject"
+        },
+        {
+            "id": "L11",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/oauth_api/basic_user_info",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                },
+                "json": {}
+            },
+            "expectStatus": 400,
+            "expectBody": [
+                {
+                    "property": "access_token",
+                    "message": "is missing and it is required"
+                }
+            ],
+            "stable": true,
+            "note": "The same endpoint answers with an array when the token comes in the header.",
+            "method": "M03",
+            "outcome": "reject"
+        },
+        {
+            "id": "L12",
+            "request": {
+                "method": "POST",
+                "url": "https://apps.olx.com.br/autoupload/published",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                },
+                "json": {}
+            },
+            "expectStatus": [
+                400,
+                500
+            ],
+            "stable": false,
+            "note": "Unstable. It only proves that the token of the autoupload group goes in the body.",
+            "method": "M02",
+            "outcome": "reject"
+        },
+        {
+            "id": "L13",
+            "request": {
+                "method": "GET",
+                "url": "https://apps.olx.com.br/autoservice/v1/lead",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                }
+            },
+            "expectStatus": [
+                401,
+                500
+            ],
+            "stable": false,
+            "note": "Unstable. It answered 401 ACCESS_DENIED once and 500 out of bounds the next time. It must never become a contract.",
+            "outcome": "reject"
+        },
+        {
+            "id": "L14",
+            "request": {
+                "method": "GET",
+                "url": "https://apps.olx.com.br/autoservice/v1/webhooks",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                }
+            },
+            "expectStatus": 500,
+            "expectBodyContains": "NOT_FOUND",
+            "stable": true,
+            "note": "The answer of a path that does not exist keeps the misspelled field mesage.",
+            "outcome": "reject"
+        },
+        {
+            "id": "L15",
+            "request": {
+                "method": "GET",
+                "url": "https://apps.olx.com.br/autoupload/car_info",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                }
+            },
+            "expectStatus": 404,
+            "expectBodyContains": "Cannot GET /v0/car_info",
+            "stable": true,
+            "note": "A GET on the autoupload group is rewritten to /v0/ and answers HTML.",
+            "method": "M07",
+            "outcome": "reject"
+        }
+    ],
+    "forbiddenHosts": [
+        "www.olx.com.br",
+        "olx.com.br"
+    ]
+}
