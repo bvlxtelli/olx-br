@@ -453,6 +453,31 @@
             "expectHeaders": {
                 "Authorization": "Bearer fake-token"
             }
+        },
+        {
+            "id": "M16",
+            "name": "listarAnuncios",
+            "kind": "static",
+            "verb": "get",
+            "url": "https://apps.olx.com.br/autoupload/v1/published",
+            "auth": "bearer",
+            "contentType": "application/json",
+            "args": [
+                "fake-token",
+                {
+                    "page_token": "page-hash",
+                    "ads_status": "published",
+                    "fetch_size": 50
+                }
+            ],
+            "expectQuery": {
+                "page_token": "page-hash",
+                "ads_status": "published",
+                "fetch_size": "50"
+            },
+            "expectHeaders": {
+                "Authorization": "Bearer fake-token"
+            }
         }
     ],
     "live": [
@@ -758,6 +783,25 @@
             "stable": true,
             "note": "A GET on the autoupload group is rewritten to /v0/ and answers HTML.",
             "method": "M07",
+            "outcome": "reject"
+        },
+        {
+            "id": "L16",
+            "request": {
+                "method": "GET",
+                "url": "https://apps.olx.com.br/autoupload/v1/published",
+                "headers": {
+                    "Authorization": "Bearer fake-access-token"
+                }
+            },
+            "expectStatus": 401,
+            "expectBody": {
+                "reason": "ACCESS_DENIED",
+                "message": "Check the client authentication token."
+            },
+            "stable": true,
+            "note": "The listing group takes the token in the Authorization header. Measured on 2026-10-20, three times in a row.",
+            "method": "M16",
             "outcome": "reject"
         }
     ],
