@@ -1,6 +1,6 @@
 # olx-br
 
-Esse é um pacote simples de integração com a [Api Importação de Anúncios](https://github.com/olxbr/ad_integration) da OLX Brasil hospedado no [NPM](https://www.npmjs.com/package/olx-br). Eu não tenho nenhuma afiliação com a OLX.
+Esse é um pacote simples de integração com a [API de Importação de Anúncios](https://developers.olx.com.br) da OLX Brasil hospedado no [NPM](https://www.npmjs.com/package/olx-br). Eu não tenho nenhuma afiliação com a OLX.
 
 ## Instalação
 
@@ -18,14 +18,14 @@ Observação: só é necessário instanciar classe para os métodos 'getAuthUrl'
 
 ## Utilização
 
-Para correta compreensão dos métodos, é necessário conhecer o funcionamento da [API da OLX](https://github.com/olxbr/ad_integration/blob/master/api/README.md).
+Para correta compreensão dos métodos, é necessário conhecer o funcionamento da [API da OLX](https://developers.olx.com.br).
 
 ```javascript
 //obter token de acesso de usuário 
 const access_token = await olx.getToken(code);
 
 //publicar um novo anúncio
-const anuncio = { "subject": "Peça de carro em ótimo estado", ... } /* veja a estrutura completa de um anuncio em https://github.com/olxbr/ad_integration/blob/master/api/import.md */
+const anuncio = { "subject": "Peça de carro em ótimo estado", ... } /* veja a estrutura completa de um anuncio em https://developers.olx.com.br/anuncio/api/import.html */
 const res = await Olx.putAnuncios(access_token, [anuncio]);
 if (res.statusCode == 0) { //anuncio foi importado e será processado
   const token_anuncio = res.token; //token usado para buscar o status do anuncio
@@ -39,13 +39,15 @@ const status = res.status;
 const anuncios = await Olx.getAnuncios(access_token); 
 
 ```
-A lista completa de métodos pode ser vista [aqui](https://github.com/ViniciusRossmann/olx-br/blob/main/src/index.ts).
+A lista completa de métodos pode ser vista [aqui](https://github.com/bvlxtelli/olx-br/blob/main/src/index.ts).
 
 ## Listagem de anúncios
 
 A API nova de anúncios lista as publicações do usuário com paginação e filtros. É o
 primeiro `GET` do pacote: o token de acesso vai no header `Authorization: Bearer` e a
 resposta traz uma página de anúncios, o token da página atual e o token da próxima página.
+A [documentação da listagem](https://developers.olx.com.br/anuncio/api/published_ads.html)
+descreve o endpoint e os parâmetros.
 
 ```javascript
 //a primeira página
@@ -93,9 +95,7 @@ sempre o primeiro da lista — mesmo quando o chamador o cita junto de outros es
 nomes dos escopos diferenciam maiúsculas de minúsculas e a ordem dos demais escopos não
 importa para o servidor de autorização da OLX.
 
-**Atenção:** os escopos `chat` e `autoservice` **ainda não foram confirmados pela OLX**. Os
-nomes são usados como estão, e viram uma constante só (`Olx.SCOPES`), para que a correção
-seja uma linha só, caso a OLX use outro nome.
+Os quatro escopos estão confirmados pela [documentação de autenticação da OLX](https://developers.olx.com.br/anuncio/api/oauth.html): `basic_user_info` (acesso às informações básicas do usuário), `autoupload` (envio de anúncios de forma automática), `autoservice` (alterações de configuração do recebimento de leads e do envio de webhooks) e `chat` (configuração de chat e recebimento das mensagens). Os nomes são usados como estão, e viram uma constante só (`Olx.SCOPES`), para que a correção seja uma linha só, caso a OLX use outro nome.
 
 **Atenção ao `redirect_uri`:** ele é enviado exatamente como foi registrado, sem codificação,
 porque o servidor de autorização o compara com o valor registrado. Por isso, o
@@ -106,11 +106,21 @@ porque o servidor de autorização o compara com o valor registrado. Por isso, o
 As mensagens dos compradores podem ser recebidas através de um webhook. O cliente de chat
 usa o token de acesso como *bearer token* e exige o escopo `chat`.
 
-| Método | Requisição | Resposta |
+| Método | Requisição | Resposta medida |
 |---|---|---|
-| `Olx.ativarWebhookChat(access_token, webhook)` | `POST /autoservice/v1/chat` com `{"webhook": "url"}` | `201` na primeira ativação, `200` em atualizações, `401` com token inválido |
-| `Olx.desativarWebhookChat(access_token)` | `DELETE /autoservice/v1/chat` | `200` ao desativar, `400` quando a conta não existe |
-| `Olx.responderChat(access_token, mensagem)` | `POST /autoservice/v1/chat/send` com `{"textMessage", "messageId", "chatId"}` | `200` ao enviar, `400` com corpo inválido ou sem integração, `500` em erro interno |
+| `Olx.ativarWebhookChat(access_token, webhook)` | `POST /autoservice/v1/chat` com `{"webhook": "url"}` | `401 {"message":"Unauthorized"}` com token inválido |
+| `Olx.desativarWebhookChat(access_token)` | `DELETE /autoservice/v1/chat` | `401 {"message":"Unauthorized"}` com token inválido |
+| `Olx.responderChat(access_token, mensagem)` | `POST /autoservice/v1/chat/send` com `{"textMessage", "messageId", "chatId"}` | `401 {"message":"Unauthorized"}` com token inválido |
+
+Sem o token no header `Authorization: Bearer` a API responde
+`400 {"message":"Bad request: accessToken is required"}` — e o mesmo `400` quando o token
+vai no header `accessToken` ou no corpo da requisição.
+
+**Não verificado:** a documentação da OLX descreve outras respostas para estas chamadas
+(`201` na primeira ativação do webhook, `200` nas atualizações, `200` no envio de uma
+mensagem, `400` quando a conta não existe e `500` em erro interno). **Nada disso foi
+reproduzido**: com um token inválido o grupo `autoservice` responde `401` antes de qualquer
+outra coisa, e sem uma credencial real não é possível chegar às respostas de sucesso.
 
 ```javascript
 //ativar o webhook que receberá as mensagens dos compradores

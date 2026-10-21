@@ -23,10 +23,17 @@ export interface ChatMessage {
 /**
  * Situação de um anúncio na listagem.
  *
- * O valor é enviado para a API exatamente como foi informado, para que um valor novo que a
- * OLX adicione não seja barrado pelo pacote.
+ * Os quatro valores abaixo são os que a documentação da OLX descreve, e são os que o editor
+ * de código sugere. O tipo aceita **qualquer string**, porque o valor é enviado para a API
+ * exatamente como foi informado: um valor novo que a OLX adicione não pode ser barrado pelo
+ * pacote (e a lista de valores aqui é a da documentação, não a da API).
  */
-export type SituacaoAnuncio = 'published' | 'pending_review' | 'deleted' | 'refused';
+export type SituacaoAnuncio =
+    | 'published'
+    | 'pending_review'
+    | 'deleted'
+    | 'refused'
+    | (string & NonNullable<unknown>);
 
 /**
  * Filtros e paginação da listagem de anúncios.
