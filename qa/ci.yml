@@ -1,0 +1,64 @@
+# PROPOSAL for .github/workflows/ci.yml (the workflow of the fork).
+#
+# This file is NOT read by GitHub: the workflow lives in .github/workflows/ci.yml and this
+# branch does not touch it. It is the QA proposal, kept here with the harness it belongs
+# to, so that the team can merge the two QA jobs into the workflow of the fork in one go.
+#
+# Rules of the QA layer:
+#   - the offline contract suite and the compatibility gate are REQUIRED: they are
+#     deterministic, they need no secret and they never touch the network of the OLX;
+#   - the live suite is NEVER a merge blocker: it talks to the real API, it may be
+#     unreachable from the runner and it must not hold a pull request.
+name: QA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  qa-contract:
+    name: QA contract suite (offline, deterministic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: build (the contract suite runs against dist/)
+        run: npm run build
+
+      - name: offline contract suite
+        run: node --test --test-reporter=spec qa/contract.test.js
+
+      - name: compatibility gate against the frozen olx-br@1.0.6
+        run: node qa/compat-check.js
+
+  qa-live:
+    name: QA live matrix (never blocks the merge)
+    runs-on: ubuntu-latest
+    needs: qa-contract
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Without a secret the suite runs with a fake token: it validates the authentication
+      # and the shape of the error, never a real permission. With the secret of the
+      # repository it uses the real token. A network failure becomes a SKIP, not a FAIL.
+      - name: live matrix (26 assertions)
+        env:
+          OLX_LIVE: '1'
+          OLX_ACCESS_TOKEN: ${{ secrets.OLX_ACCESS_TOKEN }}
+        run: node --test --test-reporter=spec qa/live.test.js
