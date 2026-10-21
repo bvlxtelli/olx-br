@@ -18,6 +18,10 @@
         "qa:contract": "vitest run test/qa/contract-matrix.test.ts",
         "qa:compat": "vitest run test/qa/compat-1.0.6.test.ts",
         "qa:live": "vitest run --config vitest.integration.config.mts test/integration/live-matrix.test.ts",
+        "qa:matrix:contract": "node --test qa/contract.test.js",
+        "qa:matrix:compat": "node qa/compat-check.js",
+        "qa:matrix:live": "node --test qa/live.test.js",
+        "qa:matrix:all": "npm run build && npm run qa:matrix:contract && npm run qa:matrix:compat",
         "prepublishOnly": "npm run build"
     },
     "keywords": ["OLX", "OLX Brasil"],
