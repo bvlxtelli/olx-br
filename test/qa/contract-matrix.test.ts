@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { inspect } from 'node:util';
 import Olx from '../../src/index';
 import { appApi, authApi, chatApi } from '../../src/services/api';
 import { headerOf, mockAdapter, RecordedRequest } from '../helpers/axios-mock';
@@ -34,6 +35,8 @@ type MatrixRow = {
         prefix: string;
         params: Record<string, string>;
         noDoubleSlash?: boolean;
+        /** The exact query string, before any decoding. */
+        rawQuery?: string;
     };
 };
 
@@ -51,6 +54,10 @@ type LiveRow = {
     expectStatus: number | number[];
     expectBody?: unknown;
     expectBodyContains?: string;
+    /** The code the error has to read, or `null` when the API does not report one. */
+    expectCode?: string | number | null;
+    /** The message the error has to read. */
+    expectMessage?: string;
     stable: boolean;
     note?: string;
 };
@@ -215,6 +222,16 @@ describe('contract matrix', () => {
                 expect(params.get(name)).toBe(value);
             }
 
+            // The parsed parameters cannot tell a verbatim value from an encoded one: the
+            // `redirect_uri` is compared with the value registered in the application, so
+            // the raw query string is the contract.
+            if (row.expectUrl!.rawQuery !== undefined) {
+                const query = url.slice(url.indexOf('?') + 1);
+                expect(query, `${row.id} did not build the raw query of the contract`).toBe(
+                    row.expectUrl!.rawQuery
+                );
+            }
+
             expect(requests).toHaveLength(0);
         });
     });
@@ -247,10 +264,131 @@ describe('contract matrix', () => {
             expect(result).toBeInstanceOf(Olx.OlxApiError);
             expect(result.status).toBe(status);
 
+            if (row.expectCode !== undefined) {
+                if (row.expectCode === null) {
+                    expect(result.code, `${row.id} invented a code`).toBeUndefined();
+                } else {
+                    expect(result.code, `${row.id} did not read the code of the contract`).toBe(
+                        row.expectCode
+                    );
+                }
+            }
+
+            if (row.expectMessage !== undefined) {
+                expect(result.message, `${row.id} did not read the message of the contract`).toBe(
+                    row.expectMessage
+                );
+            }
+
             if (row.expectBodyContains !== undefined) {
                 expect(String(result.body)).toContain(row.expectBodyContains);
             } else if (row.expectBody !== undefined) {
                 expect(result.body).toEqual(body);
+            }
+        });
+    });
+
+    describe('the error object follows the contract', () => {
+        const contract = matrix.errorContract as {
+            causeNonEnumerable: boolean;
+            causeRedactsCredentials: boolean;
+            bodyFieldsCopied: boolean;
+            forbiddenBodyFields: string[];
+            codeOrder: string[];
+        };
+
+        /** The body that carries each field of the order of the contract. */
+        const bodyOfField: Record<string, unknown> = {
+            code: { code: 'from-code' },
+            reason: { reason: 'from-reason' },
+            statusCode: { statusCode: 'from-statusCode' },
+            error: { error: 'from-error' },
+            'error.code': { error: { code: 'from-error-code' } },
+            'error.reason': { error: { reason: 'from-error-reason' } },
+            'error.statusCode': { error: { statusCode: 'from-error-statusCode' } }
+        };
+
+        it('reads the code in the order of the contract', async () => {
+            for (const field of contract.codeOrder) {
+                const body = bodyOfField[field];
+                const expected = `from-${field.replace('.', '-')}`;
+
+                useMock({ status: 400, statusText: 'Bad Request', data: body });
+
+                const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
+
+                expect(error).toBeInstanceOf(Olx.OlxApiError);
+                expect(
+                    error.code,
+                    `the body with ${field} did not give the code of the contract`
+                ).toBe(expected);
+            }
+        });
+
+        it('reads the first code of the order when the body has more than one', async () => {
+            useMock({
+                status: 400,
+                statusText: 'Bad Request',
+                data: { code: 'from-code', reason: 'from-reason', statusCode: 'from-status-code' }
+            });
+
+            const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
+
+            expect(error.code).toBe('from-code');
+        });
+
+        it('keeps the cause out of the enumerable fields and out of the JSON', async () => {
+            useMock({ status: 401, statusText: 'Unauthorized', data: { message: 'Unauthorized' } });
+
+            const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
+
+            expect(contract.causeNonEnumerable).toBe(true);
+            expect(Object.keys(error)).not.toContain('cause');
+            expect(JSON.stringify(error)).not.toContain('cause');
+        });
+
+        it('removes the credentials of the application from the cause', async () => {
+            useMock({ status: 401, statusText: 'Unauthorized', data: { message: 'Unauthorized' } });
+
+            const error: any = await Olx.getAnuncios('SUPER-SECRET-TOKEN').catch(
+                (err: unknown) => err
+            );
+
+            expect(contract.causeRedactsCredentials).toBe(true);
+            expect(inspect(error, { depth: null })).not.toContain('SUPER-SECRET-TOKEN');
+            expect(JSON.stringify(error)).not.toContain('SUPER-SECRET-TOKEN');
+        });
+
+        it('copies the fields of the body onto the error', async () => {
+            useMock({
+                status: 400,
+                statusText: 'Bad Request',
+                data: { message: 'invalid request', errors: ['ad_list'] }
+            });
+
+            const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
+
+            expect(contract.bodyFieldsCopied).toBe(true);
+            expect(error.errors).toEqual(['ad_list']);
+        });
+
+        it('never copies the forbidden fields of the body', async () => {
+            const body = JSON.parse(
+                '{"__proto__": {"polluted": true}, "constructor": "x", "prototype": "y", "message": "boom"}'
+            );
+
+            useMock({ status: 400, statusText: 'Bad Request', data: body });
+
+            const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
+
+            expect(error).toBeInstanceOf(Olx.OlxApiError);
+            expect(Object.getPrototypeOf(error)).toBe(Olx.OlxApiError.prototype);
+
+            for (const field of contract.forbiddenBodyFields) {
+                expect(
+                    Object.prototype.hasOwnProperty.call(error, field),
+                    `${field} was copied from the body`
+                ).toBe(false);
             }
         });
     });
