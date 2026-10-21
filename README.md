@@ -261,6 +261,18 @@ npm run build      # compila em dist/
 npm test           # roda a suíte de testes
 ```
 
+### Matriz de QA
+
+A pasta `qa/` guarda a matriz de QA do time: o contrato executável de cada método público
+(verbo, URL, autenticação e corpo) e o baseline congelado do pacote publicado, para a
+comparação de compatibilidade.
+
+| script | o que ele roda |
+|---|---|
+| `npm run qa:contract` | a matriz do contrato: cada linha de `qa/contract-matrix.json` vira uma asserção |
+| `npm run qa:compat` | a compatibilidade com o `olx-br@1.0.6` publicado, contra o pacote compilado |
+| `npm run qa:live` | a mesma matriz, contra a API da OLX no ar |
+
 ## Contato
 
 - Autor: Vinícius Rossmann Nunes
