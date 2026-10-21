@@ -28,10 +28,14 @@ const SCOPES = {
 /**
  * Monta a lista de escopos que será enviada na URL de autenticação.
  *
+ * O escopo `basic_user_info` é o escopo base da aplicação: ele é sempre solicitado e é
+ * sempre o primeiro da lista, mesmo quando o chamador o cita junto de outros escopos. A
+ * ordem dos demais escopos é a do chamador.
+ *
  * @param {boolean|string|string[]} request Escopos solicitados. `true` mantém o
  *   comportamento original (`basic_user_info` e `autoupload`), `false` solicita apenas
  *   `basic_user_info` e uma string (ou array) solicita os escopos informados.
- * @returns {string[]} Lista de escopos, sem repetições.
+ * @returns {string[]} Lista de escopos, sem repetições e com `basic_user_info` na frente.
  */
 function resolveScopes(request: boolean | string | string[]): string[] {
     const scopes: string[] = [];
@@ -55,10 +59,14 @@ function resolveScopes(request: boolean | string | string[]): string[] {
         return scopes;
     }
 
-    // O escopo base da aplicação é sempre solicitado.
-    if (scopes.indexOf(SCOPES.basicUserInfo) === -1) scopes.unshift(SCOPES.basicUserInfo);
+    // O escopo base da aplicação é sempre solicitado e é sempre o primeiro. Quando o
+    // chamador o cita junto de outros escopos, ele é retirado da lista do chamador e
+    // reinserido no início: assim ele vai para a frente (regra 1 do contrato) e não fica
+    // repetido.
+    const others = scopes.filter((scope) => scope !== SCOPES.basicUserInfo);
+    const withBase: string[] = [SCOPES.basicUserInfo];
 
-    return scopes;
+    return withBase.concat(others);
 }
 
 class Olx {

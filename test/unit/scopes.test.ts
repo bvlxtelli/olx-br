@@ -61,6 +61,21 @@ describe('OAuth scopes', () => {
         expect(scopeOf(['autoservice'])).toContain('basic_user_info');
     });
 
+    it('always puts the basic user info scope first', () => {
+        // O contrato exige que o escopo base venha na frente, mesmo quando o chamador o
+        // cita junto de outros escopos.
+        expect(scopeOf('chat basic_user_info')).toBe('basic_user_info chat');
+        expect(scopeOf('basic_user_info chat')).toBe('basic_user_info chat');
+        expect(scopeOf(['chat', 'basic_user_info'])).toBe('basic_user_info chat');
+        expect(scopeOf(['basic_user_info', 'chat'])).toBe('basic_user_info chat');
+        expect(scopeOf('autoservice chat basic_user_info')).toBe('basic_user_info autoservice chat');
+    });
+
+    it('does not repeat the basic user info scope', () => {
+        expect(scopeOf('basic_user_info chat basic_user_info')).toBe('basic_user_info chat');
+        expect(scopeOf(['basic_user_info', 'chat', 'basic_user_info'])).toBe('basic_user_info chat');
+    });
+
     it('does not change the case of the requested scopes', () => {
         expect(scopeOf('CHAT')).toBe('basic_user_info CHAT');
     });
