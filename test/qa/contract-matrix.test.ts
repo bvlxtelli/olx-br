@@ -295,6 +295,12 @@ describe('contract matrix', () => {
             bodyFieldsCopied: boolean;
             forbiddenBodyFields: string[];
             codeOrder: string[];
+            errorShapes: {
+                name: string;
+                body: unknown;
+                code: string | number | null;
+                message: string;
+            }[];
         };
 
         /** The body that carries each field of the order of the contract. */
@@ -335,6 +341,28 @@ describe('contract matrix', () => {
             const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
 
             expect(error.code).toBe('from-code');
+        });
+
+        it('reads the code and the message of every shape of error of the contract', async () => {
+            for (const shape of contract.errorShapes) {
+                useMock({ status: 400, statusText: 'Bad Request', data: shape.body });
+
+                const error: any = await Olx.getAnuncios('fake-token').catch((err: unknown) => err);
+
+                expect(error, shape.name).toBeInstanceOf(Olx.OlxApiError);
+
+                if (shape.code === null) {
+                    expect(error.code, `${shape.name} invented a code`).toBeUndefined();
+                } else {
+                    expect(error.code, `${shape.name} did not read the code of the contract`).toBe(
+                        shape.code
+                    );
+                }
+
+                expect(error.message, `${shape.name} did not read the message of the contract`).toBe(
+                    shape.message
+                );
+            }
         });
 
         it('keeps the cause out of the enumerable fields and out of the JSON', async () => {

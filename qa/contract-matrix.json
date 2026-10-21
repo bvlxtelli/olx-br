@@ -778,6 +778,65 @@
             "error.code",
             "error.reason",
             "error.statusCode"
+        ],
+        "errorShapes": [
+            {
+                "name": "the OAuth2 error of the authorization server",
+                "body": {
+                    "error": "invalid_grant",
+                    "error_description": "Bad code"
+                },
+                "code": "invalid_grant",
+                "message": "Bad code"
+            },
+            {
+                "name": "the OAuth2 error without a description",
+                "body": {
+                    "error": "invalid_client"
+                },
+                "code": "invalid_client",
+                "message": "invalid_client"
+            },
+            {
+                "name": "the nested error of the autoupload group",
+                "body": {
+                    "status": "ERROR",
+                    "error": {
+                        "reason": "ACCESS_TOKEN_NOT_FOUND",
+                        "message": "Response code 404 (Not Found)",
+                        "statusCode": 404
+                    }
+                },
+                "code": "ACCESS_TOKEN_NOT_FOUND",
+                "message": "Response code 404 (Not Found)"
+            },
+            {
+                "name": "the plain message",
+                "body": {
+                    "message": "Unauthorized"
+                },
+                "code": null,
+                "message": "Unauthorized"
+            },
+            {
+                "name": "the misspelled field of a path that does not exist",
+                "body": {
+                    "mesage": "404 NOT_FOUND"
+                },
+                "code": null,
+                "message": "404 NOT_FOUND"
+            },
+            {
+                "name": "the root message wins over the nested one",
+                "body": {
+                    "message": "from-root",
+                    "error": {
+                        "message": "from-nested"
+                    }
+                },
+                "code": null,
+                "message": "from-root"
+            }
         ]
     },
     "forbiddenHosts": [
