@@ -66,6 +66,47 @@
             }
         },
         {
+            "id": "M00d",
+            "name": "getAuthUrl",
+            "kind": "instance",
+            "noHttp": true,
+            "args": [
+                "chat basic_user_info"
+            ],
+            "expectUrl": {
+                "prefix": "https://auth.olx.com.br/oauth?",
+                "noDoubleSlash": true,
+                "params": {
+                    "response_type": "code",
+                    "client_id": "client-id",
+                    "redirect_uri": "https://example.com/callback",
+                    "scope": "basic_user_info chat"
+                }
+            }
+        },
+        {
+            "id": "M00e",
+            "name": "getAuthUrl",
+            "kind": "instance",
+            "noHttp": true,
+            "args": [
+                [
+                    "chat",
+                    "basic_user_info"
+                ]
+            ],
+            "expectUrl": {
+                "prefix": "https://auth.olx.com.br/oauth?",
+                "noDoubleSlash": true,
+                "params": {
+                    "response_type": "code",
+                    "client_id": "client-id",
+                    "redirect_uri": "https://example.com/callback",
+                    "scope": "basic_user_info chat"
+                }
+            }
+        },
+        {
             "id": "M01",
             "name": "getToken",
             "kind": "instance",

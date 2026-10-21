@@ -58,8 +58,9 @@ const url = olx.getAuthUrl(['chat', 'autoservice']);  //ou em um array
 const url = olx.getAuthUrl('chat', 'meu-state');      //o state continua funcionando
 ```
 
-O escopo `basic_user_info` é sempre solicitado, por ser o escopo base da aplicação. Os
-nomes dos escopos diferenciam maiúsculas de minúsculas e a ordem em que são enviados não
+O escopo `basic_user_info` é sempre solicitado, por ser o escopo base da aplicação, e é
+sempre o primeiro da lista — mesmo quando o chamador o cita junto de outros escopos. Os
+nomes dos escopos diferenciam maiúsculas de minúsculas e a ordem dos demais escopos não
 importa para o servidor de autorização da OLX.
 
 **Atenção:** os escopos `chat` e `autoservice` **ainda não foram confirmados pela OLX**. Os
