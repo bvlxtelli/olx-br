@@ -18,7 +18,28 @@ mkdirSync(target, { recursive: true });
 const dist = path.join(source, 'dist');
 cpSync(dist, path.join(target, 'dist'), { recursive: true });
 
-const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+/**
+ * The hash of a file with the line endings normalized to CRLF.
+ *
+ * The published package stores its files with CRLF and git stores them with LF. The
+ * hash of the raw bytes would depend on the platform that generated the manifest, and
+ * the check that reads the manifest would fail on the other one. The CRLF is the
+ * canonical form of the published tarball, so the hash of the normalized content is
+ * the same on every machine.
+ *
+ * @param {string} file Path of the file.
+ * @returns {string} The hash of the content with CRLF line endings.
+ */
+const shaNormalized = (file) =>
+    createHash('sha256')
+        .update(
+            readFileSync(file)
+                .toString('binary')
+                .replace(/\r\n/g, '\n')
+                .replace(/\n/g, '\r\n'),
+            'binary'
+        )
+        .digest('hex');
 
 const files = [];
 const walk = (folder) => {
@@ -42,8 +63,8 @@ const manifest = {
     declaration: 'dist/index.d.ts',
     files,
     sha256: {
-        'dist/index.js': sha(path.join(target, 'dist', 'index.js')),
-        'dist/index.d.ts': sha(path.join(target, 'dist', 'index.d.ts'))
+        'dist/index.js': shaNormalized(path.join(target, 'dist', 'index.js')),
+        'dist/index.d.ts': shaNormalized(path.join(target, 'dist', 'index.d.ts'))
     },
     note: 'Frozen baseline of the published package. The compatibility gate compares the built package of the branch against this folder. Regenerate it only on purpose.'
 };

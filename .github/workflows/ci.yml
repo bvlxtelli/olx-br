@@ -59,3 +59,35 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:integration
+
+  # The second QA layer of the package: the offline contract suite of `qa/contract.test.js`
+  # and the compatibility gate of `qa/compat-check.js`. They are written with `node:test`
+  # on purpose, so that they run without a single new dependency, against the BUILT
+  # package, and without the whole tool chain of the package.
+  #
+  # Until this job, the layer only existed as files in `qa/` and never ran anywhere.
+  # The offline suite and the compatibility gate are deterministic, need no secret and
+  # never touch the network of the OLX: they are required. The live suite is NOT a merge
+  # blocker: it talks to the real API and it may be unreachable from the runner.
+  qa-matrix:
+    name: QA matrix layer (offline, deterministic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: build (the QA layer reads dist/)
+        run: npm run build
+      - name: offline contract suite of the QA layer
+        run: npm run qa:matrix:contract
+      - name: compatibility gate against the frozen olx-br@1.0.6
+        run: npm run qa:matrix:compat
+      - name: live matrix of the QA layer (never blocks the merge)
+        continue-on-error: true
+        env:
+          OLX_LIVE: '1'
+          OLX_ACCESS_TOKEN: ${{ secrets.OLX_ACCESS_TOKEN }}
+        run: npm run qa:matrix:live
