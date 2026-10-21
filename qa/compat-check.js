@@ -52,6 +52,25 @@ const DECLARED = {
 
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
+/**
+ * The sha256 of a file, with the line endings normalized to CRLF.
+ *
+ * The published package stores its files with CRLF and git stores them with LF. Hashing
+ * the raw bytes makes the check depend on the platform: it passes on a Windows checkout
+ * and fails on a Linux one, for the very same file. The CRLF is the canonical form of
+ * the published tarball, so the hash of the normalized content is the same everywhere.
+ *
+ * @param {Buffer} buffer Content of the file.
+ * @returns {string} The hash of the content with CRLF line endings.
+ */
+const sha256Crlf = (buffer) =>
+    sha256(
+        Buffer.from(
+            buffer.toString('binary').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n'),
+            'binary'
+        )
+    );
+
 function fail(message) {
     console.error('  [FAIL] ' + message);
     process.exitCode = 1;
@@ -281,7 +300,12 @@ function main() {
             fail('the baseline file ' + file + ' is missing');
             continue;
         }
-        const actual = sha256(fs.readFileSync(full));
+        // The integrity is compared on the content with the line endings normalized to CRLF.
+        // The published tarball stores the files with CRLF and git stores them with LF:
+        // hashing the raw bytes would make the check pass on a Windows checkout and fail
+        // on a Linux one, for the very same file. The CRLF is the canonical form of the
+        // published package, so the hash of the normalized content is the same everywhere.
+        const actual = sha256Crlf(fs.readFileSync(full));
         const ok = actual === expected;
         console.log('  sha256 ' + file.padEnd(20) + ': ' + actual + (ok ? ' (integrity OK)' : ' (MISMATCH, expected ' + expected + ')'));
         if (!ok) fail('the frozen baseline ' + file + ' was changed');
