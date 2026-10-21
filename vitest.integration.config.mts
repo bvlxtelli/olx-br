@@ -6,8 +6,8 @@ import { defineConfig } from 'vitest/config';
  * These tests talk to the live OLX API, so they are kept apart from the unit tests and are
  * only run when they are explicitly requested. They never use a real credential.
  *
- * Two flags are set, because the two integration suites use different names: `OLX_LIVE`
- * for the suite of the fork and `OLX_INTEGRATION_TESTS` for the live matrix of the QA team.
+ * Two switches are set, one for each suite: `OLX_LIVE` enables `test/integration/olx-api.test.ts`
+ * and `OLX_INTEGRATION_TESTS` enables `test/integration/live-matrix.test.ts`.
  */
 export default defineConfig({
     test: {
