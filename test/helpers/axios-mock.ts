@@ -13,6 +13,8 @@ export interface RecordedRequest {
     headers: Record<string, string>;
     /** Raw request body, exactly as it was handed over to axios. */
     rawBody: unknown;
+    /** Query parameters, as axios received them. */
+    params?: Record<string, unknown>;
 }
 
 /** Response returned by the mock adapter. */
@@ -44,7 +46,8 @@ export function mockAdapter(response: MockResponse = {}): AxiosMock {
             method: (config.method || 'get').toLowerCase(),
             body: parseBody(config.data),
             headers: { ...(config.headers as unknown as Record<string, string>) },
-            rawBody: config.data
+            rawBody: config.data,
+            params: config.params as unknown as Record<string, unknown> | undefined
         });
 
         const status = response.status === undefined ? 200 : response.status;
@@ -100,6 +103,20 @@ export function headerOf(request: RecordedRequest, name: string): string | undef
     const wanted = name.toLowerCase();
     const found = Object.keys(request.headers).find((key) => key.toLowerCase() === wanted);
     return found === undefined ? undefined : request.headers[found];
+}
+
+/**
+ * Builds the URL of a recorded request with its query string, serialized the same way
+ * axios does when the request leaves the library.
+ *
+ * @param {RecordedRequest} request Request recorded by the mock adapter.
+ * @returns {string} The URL with the query string.
+ */
+export function urlOf(request: RecordedRequest): string {
+    return axios.getUri({
+        url: request.url,
+        params: request.params as Record<string, unknown> | undefined
+    });
 }
 
 /**

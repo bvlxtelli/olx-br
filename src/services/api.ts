@@ -33,6 +33,18 @@ export const chatApi = axios.create({
 });
 
 /**
+ * Client of the listing API of the advertisements (`autoupload/v1`).
+ *
+ * It is a group of its own: the listing takes the access token in the
+ * `Authorization: Bearer` header and answers with the pages of the listing, so it is
+ * kept as a separate instance, like the client of the automatic service.
+ */
+export const listingApi = axios.create({
+    baseURL: APP_BASE_URL,
+    headers: { 'Content-Type': 'application/json' }
+});
+
+/**
  * Returns the base URL of an axios instance without trailing slashes, so that a path can
  * be safely appended to it.
  *

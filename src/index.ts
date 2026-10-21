@@ -4,8 +4,8 @@
  * MIT Licensed
  */
 
-import { authApi, appApi, chatApi, baseUrlOf, AUTH_BASE_URL } from './services/api';
-import { UserInfo, ModelosResponse, ChatMessage } from './types';
+import { authApi, appApi, chatApi, listingApi, baseUrlOf, AUTH_BASE_URL } from './services/api';
+import { UserInfo, ModelosResponse, ChatMessage, ListagemAnuncios, OpcoesListagem } from './types';
 import { OlxApiError, toOlxApiError } from './errors';
 
 /**
@@ -180,6 +180,54 @@ class Olx {
             throw toOlxApiError(err);
         }
         return result.data;
+    }
+
+    /**
+     * Lista os anúncios do usuário pela API de listagem, com paginação e filtros.
+     *
+     * É a API nova de anúncios: o token de acesso vai no header `Authorization: Bearer` e
+     * a resposta traz uma página de anúncios, o token da página atual e o token da próxima
+     * página. Quando o `next_token` é `null`, a listagem acabou.
+     *
+     * ```javascript
+     * let pagina = await Olx.listarAnuncios(access_token);
+     * while (pagina.next_token) {
+     *   pagina = await Olx.listarAnuncios(access_token, { page_token: pagina.next_token });
+     * }
+     * ```
+     *
+     * @param {string} access_token Chave de acesso do usuário (header `Authorization: Bearer`)
+     * @param {OpcoesListagem} [opcoes] Filtros e paginação da listagem
+     * @returns {Promise<ListagemAnuncios>} Uma página de anúncios e o token da próxima página
+     */
+    static async listarAnuncios(
+        access_token: string,
+        opcoes?: OpcoesListagem
+    ): Promise<ListagemAnuncios> {
+        // Só são enviados os filtros que o chamador informou: a API responde `400` quando
+        // recebe um parâmetro vazio.
+        const params: Record<string, string | number> = {};
+        if (opcoes && opcoes.page_token) params.page_token = opcoes.page_token;
+        if (opcoes && opcoes.ads_status) params.ads_status = opcoes.ads_status;
+        if (opcoes && opcoes.fetch_size !== undefined) params.fetch_size = opcoes.fetch_size;
+
+        let result;
+        try {
+            result = await listingApi.get('/autoupload/v1/published', {
+                params,
+                headers: { Authorization: `Bearer ${access_token}` }
+            });
+        } catch (err) {
+            throw toOlxApiError(err);
+        }
+
+        const body = (result.data || {}) as Partial<ListagemAnuncios>;
+
+        return {
+            data: Array.isArray(body.data) ? body.data : [],
+            current_token: body.current_token === undefined ? null : body.current_token,
+            next_token: body.next_token === undefined ? null : body.next_token
+        };
     }
 
     /**
@@ -384,6 +432,10 @@ namespace Olx {
     export type ModelosResponse = import('./types').ModelosResponse;
     export type ChatMessage = import('./types').ChatMessage;
     export type OlxApiError = import('./errors').OlxApiError;
+    export type ListagemAnuncios = import('./types').ListagemAnuncios;
+    export type AnuncioListado = import('./types').AnuncioListado;
+    export type OpcoesListagem = import('./types').OpcoesListagem;
+    export type SituacaoAnuncio = import('./types').SituacaoAnuncio;
 }
 
 export = Olx;

@@ -41,6 +41,36 @@ const anuncios = await Olx.getAnuncios(access_token);
 ```
 A lista completa de métodos pode ser vista [aqui](https://github.com/ViniciusRossmann/olx-br/blob/main/src/index.ts).
 
+## Listagem de anúncios
+
+A API nova de anúncios lista as publicações do usuário com paginação e filtros. É o
+primeiro `GET` do pacote: o token de acesso vai no header `Authorization: Bearer` e a
+resposta traz uma página de anúncios, o token da página atual e o token da próxima página.
+
+```javascript
+//a primeira página
+let pagina = await Olx.listarAnuncios(access_token, { fetch_size: 50 });
+
+//com filtro de situação
+pagina = await Olx.listarAnuncios(access_token, { ads_status: 'pending_review' });
+
+//as páginas seguintes: o next_token da página anterior vira o page_token
+while (pagina.next_token) {
+  pagina = await Olx.listarAnuncios(access_token, { page_token: pagina.next_token });
+  console.log(pagina.data);   //[{ id, list_id, status }]
+}
+```
+
+| opção | o que é |
+|---|---|
+| `page_token` | o `next_token` da página anterior |
+| `ads_status` | `published`, `pending_review`, `deleted` ou `refused` |
+| `fetch_size` | quantos anúncios por página (a API aceita no máximo 200) |
+
+O método devolve `{ data, current_token, next_token }`. Quando o `next_token` é `null`, a
+listagem acabou. O método legado `getAnuncios()` continua existindo, com o token no corpo
+da requisição.
+
 ## Escopos OAuth
 
 `getAuthUrl()` aceita, além do booleano, os escopos que devem ser solicitados. As opções

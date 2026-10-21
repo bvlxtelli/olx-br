@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Olx from '../../src/index';
-import { appApi, authApi, chatApi } from '../../src/services/api';
-import { headerOf, mockAdapter, RecordedRequest } from '../helpers/axios-mock';
+import { appApi, authApi, chatApi, listingApi } from '../../src/services/api';
+import { headerOf, mockAdapter, urlOf, RecordedRequest } from '../helpers/axios-mock';
 import matrix from '../../qa/contract-matrix.json';
 
 /**
@@ -30,6 +30,8 @@ type MatrixRow = {
     mockResponse?: unknown;
     expectBody?: { json?: unknown; form?: Record<string, string> };
     expectHeaders?: Record<string, string | null>;
+    /** The query parameters the request has to send. */
+    expectQuery?: Record<string, string>;
     expectUrl?: {
         prefix: string;
         params: Record<string, string>;
@@ -63,7 +65,8 @@ const olx = new Olx('client-id', 'client-secret', 'https://example.com/callback'
 const originalAdapters = {
     app: appApi.defaults.adapter,
     auth: authApi.defaults.adapter,
-    chat: chatApi.defaults.adapter
+    chat: chatApi.defaults.adapter,
+    listing: listingApi.defaults.adapter
 };
 
 let requests: RecordedRequest[] = [];
@@ -74,6 +77,7 @@ function useMock(response: { data?: unknown; status?: number; statusText?: strin
     appApi.defaults.adapter = mock.adapter;
     authApi.defaults.adapter = mock.adapter;
     chatApi.defaults.adapter = mock.adapter;
+    listingApi.defaults.adapter = mock.adapter;
     return mock;
 }
 
@@ -81,6 +85,7 @@ function restoreAdapters() {
     appApi.defaults.adapter = originalAdapters.app;
     authApi.defaults.adapter = originalAdapters.auth;
     chatApi.defaults.adapter = originalAdapters.chat;
+    listingApi.defaults.adapter = originalAdapters.listing;
 }
 
 function invoke(row: MatrixRow): Promise<unknown> {
@@ -177,6 +182,14 @@ describe('contract matrix', () => {
                     expect(actual).toBeUndefined();
                 } else {
                     expect(actual).toBe(expected);
+                }
+            }
+
+            if (row.expectQuery) {
+                const query = new URL(urlOf(requests[0])).searchParams;
+
+                for (const [name, value] of Object.entries(row.expectQuery)) {
+                    expect(query.get(name), `${row.id} did not send ${name} in the query`).toBe(value);
                 }
             }
 
