@@ -16,6 +16,7 @@
             "expectUrl": {
                 "prefix": "https://auth.olx.com.br/oauth?",
                 "noDoubleSlash": true,
+                "rawQuery": "response_type=code&client_id=client-id&redirect_uri=https://example.com/callback&scope=basic_user_info%20autoupload",
                 "params": {
                     "response_type": "code",
                     "client_id": "client-id",
@@ -35,6 +36,7 @@
             "expectUrl": {
                 "prefix": "https://auth.olx.com.br/oauth?",
                 "noDoubleSlash": true,
+                "rawQuery": "response_type=code&client_id=client-id&redirect_uri=https://example.com/callback&scope=basic_user_info",
                 "params": {
                     "response_type": "code",
                     "client_id": "client-id",
@@ -57,6 +59,7 @@
             "expectUrl": {
                 "prefix": "https://auth.olx.com.br/oauth?",
                 "noDoubleSlash": true,
+                "rawQuery": "response_type=code&client_id=client-id&redirect_uri=https://example.com/callback&scope=basic_user_info%20chat%20autoservice",
                 "params": {
                     "response_type": "code",
                     "client_id": "client-id",
@@ -76,6 +79,7 @@
             "expectUrl": {
                 "prefix": "https://auth.olx.com.br/oauth?",
                 "noDoubleSlash": true,
+                "rawQuery": "response_type=code&client_id=client-id&redirect_uri=https://example.com/callback&scope=basic_user_info%20chat",
                 "params": {
                     "response_type": "code",
                     "client_id": "client-id",
@@ -98,6 +102,7 @@
             "expectUrl": {
                 "prefix": "https://auth.olx.com.br/oauth?",
                 "noDoubleSlash": true,
+                "rawQuery": "response_type=code&client_id=client-id&redirect_uri=https://example.com/callback&scope=basic_user_info%20chat",
                 "params": {
                     "response_type": "code",
                     "client_id": "client-id",
@@ -467,6 +472,8 @@
             "expectBody": {
                 "message": "Unauthorized"
             },
+            "expectCode": null,
+            "expectMessage": "Unauthorized",
             "stable": true,
             "note": "The autoservice group only accepts the token in the Authorization header.",
             "method": "M13",
@@ -485,6 +492,8 @@
             "expectBody": {
                 "message": "Unauthorized"
             },
+            "expectCode": null,
+            "expectMessage": "Unauthorized",
             "stable": true,
             "method": "M14",
             "outcome": "reject"
@@ -507,6 +516,8 @@
             "expectBody": {
                 "message": "Unauthorized"
             },
+            "expectCode": null,
+            "expectMessage": "Unauthorized",
             "stable": true,
             "method": "M15",
             "outcome": "reject"
@@ -524,6 +535,8 @@
             "expectBody": {
                 "message": "Bad request: accessToken is required"
             },
+            "expectCode": null,
+            "expectMessage": "Bad request: accessToken is required",
             "stable": true,
             "note": "The autoservice group uses the camelCase name accessToken, not access_token.",
             "method": "M13",
@@ -612,6 +625,8 @@
             "expectBody": {
                 "error": "invalid_client"
             },
+            "expectCode": "invalid_client",
+            "expectMessage": "invalid_client",
             "stable": true,
             "method": "M01",
             "outcome": "reject"
@@ -634,6 +649,8 @@
                     "statusCode": 404
                 }
             },
+            "expectCode": "ACCESS_TOKEN_NOT_FOUND",
+            "expectMessage": "Response code 404 (Not Found)",
             "stable": true,
             "method": "M02",
             "outcome": "reject"
@@ -744,6 +761,84 @@
             "outcome": "reject"
         }
     ],
+    "errorContract": {
+        "causeNonEnumerable": true,
+        "causeRedactsCredentials": true,
+        "bodyFieldsCopied": true,
+        "forbiddenBodyFields": [
+            "__proto__",
+            "constructor",
+            "prototype"
+        ],
+        "codeOrder": [
+            "code",
+            "reason",
+            "statusCode",
+            "error",
+            "error.code",
+            "error.reason",
+            "error.statusCode"
+        ],
+        "errorShapes": [
+            {
+                "name": "the OAuth2 error of the authorization server",
+                "body": {
+                    "error": "invalid_grant",
+                    "error_description": "Bad code"
+                },
+                "code": "invalid_grant",
+                "message": "Bad code"
+            },
+            {
+                "name": "the OAuth2 error without a description",
+                "body": {
+                    "error": "invalid_client"
+                },
+                "code": "invalid_client",
+                "message": "invalid_client"
+            },
+            {
+                "name": "the nested error of the autoupload group",
+                "body": {
+                    "status": "ERROR",
+                    "error": {
+                        "reason": "ACCESS_TOKEN_NOT_FOUND",
+                        "message": "Response code 404 (Not Found)",
+                        "statusCode": 404
+                    }
+                },
+                "code": "ACCESS_TOKEN_NOT_FOUND",
+                "message": "Response code 404 (Not Found)"
+            },
+            {
+                "name": "the plain message",
+                "body": {
+                    "message": "Unauthorized"
+                },
+                "code": null,
+                "message": "Unauthorized"
+            },
+            {
+                "name": "the misspelled field of a path that does not exist",
+                "body": {
+                    "mesage": "404 NOT_FOUND"
+                },
+                "code": null,
+                "message": "404 NOT_FOUND"
+            },
+            {
+                "name": "the root message wins over the nested one",
+                "body": {
+                    "message": "from-root",
+                    "error": {
+                        "message": "from-nested"
+                    }
+                },
+                "code": null,
+                "message": "from-root"
+            }
+        ]
+    },
     "forbiddenHosts": [
         "www.olx.com.br",
         "olx.com.br"
